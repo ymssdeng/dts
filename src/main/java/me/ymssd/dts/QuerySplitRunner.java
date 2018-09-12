@@ -11,9 +11,9 @@ import me.ymssd.dts.model.Record;
  */
 public interface QuerySplitRunner {
 
-    Range<String> getMinMaxId(String defaultMinId, String defaultMaxId, String table);
+    Range<String> getMinMaxId();
 
-    List<String> splitId(Range<String> range, int step);
+    List<String> splitId(Range<String> range);
 
-    List<Record> query(QuerySplit split);
+    QuerySplit query(Range<String> range);
 }

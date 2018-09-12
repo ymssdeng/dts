@@ -9,7 +9,6 @@ import com.google.common.collect.Range;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
-import com.mongodb.client.MongoDatabase;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.time.ZoneId;
@@ -20,12 +19,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
-import javax.sql.DataSource;
 import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.config.DtsConfig;
 import me.ymssd.dts.config.DtsConfig.QueryConfig;
 import me.ymssd.dts.config.DtsConfig.SinkConfig;
-import me.ymssd.dts.model.QuerySplit;
 import me.ymssd.dts.model.Record;
 import me.ymssd.dts.model.SinkSplit;
 
@@ -45,7 +42,8 @@ public class Dts {
     private QuerySplitRunner querySplitRunner;
     private FieldMapper fieldMapper;
     private SinkSplitRunner sinkSplitRunner;
-    private DataSource sinkDataSource;
+    private HikariDataSource sinkDataSource;
+    private MongoClient mongoClient;
     private Metric metric;
 
     public Dts(DtsConfig dtsConfig) {
@@ -53,12 +51,13 @@ public class Dts {
         Preconditions.checkNotNull(dtsConfig.getSink());
         this.queryConfig = dtsConfig.getQuery();
         this.sinkConfig = dtsConfig.getSink();
+        //metric
+        metric = new Metric();
 
         //query
         if (queryConfig.getMongo() != null) {
             MongoClient mongoClient = MongoClients.create(queryConfig.getMongo().getUrl());
-            MongoDatabase mongoDatabase = mongoClient.getDatabase(queryConfig.getMongo().getDatabase());
-            querySplitRunner = new MongoQuerySplitRunner(mongoDatabase);
+            querySplitRunner = new MongoQuerySplitRunner(mongoClient, queryConfig, metric);
         }
         Preconditions.checkNotNull(querySplitRunner);
         fieldMapper = new FieldMapper(dtsConfig.getMapping());
@@ -69,7 +68,7 @@ public class Dts {
         hikariConfig.setUsername(sinkConfig.getUsername());
         hikariConfig.setPassword(sinkConfig.getPassword());
         sinkDataSource = new HikariDataSource(hikariConfig);
-        sinkSplitRunner = new MysqlSinkSplitRunner();
+        sinkSplitRunner = new MysqlSinkSplitRunner(metric);
 
         //线程池
         ThreadFactoryBuilder builder = new ThreadFactoryBuilder();
@@ -79,15 +78,12 @@ public class Dts {
         mapExecutor = Executors.newFixedThreadPool(queryConfig.getThreadCount(), builder.build());
         builder.setNameFormat("sink-runner-%d");
         sinkExecutor = Executors.newFixedThreadPool(sinkConfig.getThreadCount(), builder.build());
-
-        //metric
-        metric = new Metric();
     }
 
     public void start() {
         metric.setQueryStartTime(System.currentTimeMillis());
-        Range<String> range = querySplitRunner.getMinMaxId(queryConfig.getMinId(), queryConfig.getMaxId(), queryConfig.getTable());
-        List<String> ids = querySplitRunner.splitId(range, queryConfig.getStep());
+        Range<String> range = querySplitRunner.getMinMaxId();
+        List<String> ids = querySplitRunner.splitId(range);
 
         List<CompletableFuture> queryFutures = new ArrayList<>();
         List<CompletableFuture> sinkFutures = new ArrayList<>();
@@ -96,14 +92,9 @@ public class Dts {
             final String upper = ids.get(i + 1);
 
             CompletableFuture future = CompletableFuture
-                .supplyAsync(() -> {
-                    QuerySplit querySplit = new QuerySplit();
-                    querySplit.setRange(Range.closed(lower, upper));
-                    querySplit.setTable(queryConfig.getTable());
-                    return querySplitRunner.query(querySplit);
-                }, queryExecutor)
-                .thenApplyAsync(records -> {
-                    return Lists.partition(records, sinkConfig.getBatchSize())
+                .supplyAsync(() -> querySplitRunner.query(Range.closed(lower, upper)), queryExecutor)
+                .thenApplyAsync(querySplit -> {
+                    return Lists.partition(querySplit.getRecords(), sinkConfig.getBatchSize())
                         .stream()
                         .map(partitionRecords -> {
                             List<Record> mappedRecords = partitionRecords.stream()
@@ -113,17 +104,18 @@ public class Dts {
                             if (mappedRecords.isEmpty()) {
                                 return null;
                             }
-                            return mappedRecords;
+                            SinkSplit sinkSplit = new SinkSplit();
+                            sinkSplit.setRecords(mappedRecords);
+                            sinkSplit.setRange(querySplit.getRange());
+                            sinkSplit.setDataSource(sinkDataSource);
+                            sinkSplit.setTable(sinkConfig.getTable());
+                            return sinkSplit;
                         })
                         .filter(r -> r != null)
                         .collect(Collectors.toList());
                 }, mapExecutor)
-                .thenAcceptAsync(splits -> {
-                    for (List<Record> split : splits) {
-                        SinkSplit sinkSplit = new SinkSplit();
-                        sinkSplit.setRecords(split);
-                        sinkSplit.setDataSource(sinkDataSource);
-                        sinkSplit.setTable(sinkConfig.getTable());
+                .thenAcceptAsync(sinkSplits -> {
+                    for (SinkSplit sinkSplit : sinkSplits) {
                         sinkFutures.add(CompletableFuture.runAsync(() -> sinkSplitRunner.sink(sinkSplit), sinkExecutor));
                         if (metric.getSinkStartTime() == 0) {
                             metric.setSinkStartTime(System.currentTimeMillis());
@@ -141,6 +133,8 @@ public class Dts {
                         metric.setSinkEndTime(System.currentTimeMillis());
                         print();
 
+                        mongoClient.close();
+                        sinkDataSource.close();
                         System.exit(0);
                     });
             });

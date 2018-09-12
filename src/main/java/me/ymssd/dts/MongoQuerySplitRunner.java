@@ -5,6 +5,8 @@ import static com.mongodb.client.model.Filters.gte;
 import static com.mongodb.client.model.Filters.lte;
 
 import com.google.common.collect.Range;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Projections;
@@ -13,6 +15,7 @@ import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import me.ymssd.dts.config.DtsConfig.QueryConfig;
 import me.ymssd.dts.model.QuerySplit;
 import me.ymssd.dts.model.Record;
 import org.apache.commons.lang.StringUtils;
@@ -26,18 +29,23 @@ import org.bson.types.ObjectId;
 @Slf4j
 public class MongoQuerySplitRunner implements QuerySplitRunner {
 
+    private QueryConfig queryConfig;
+    private Metric metric;
     private MongoDatabase mongoDatabase;
 
-    public MongoQuerySplitRunner(MongoDatabase mongoDatabase) {
-        this.mongoDatabase = mongoDatabase;
+    public MongoQuerySplitRunner(MongoClient mongoClient, QueryConfig queryConfig, Metric metric) {
+        this.queryConfig = queryConfig;
+        this.metric = metric;
+
+        mongoDatabase = mongoClient.getDatabase(queryConfig.getMongo().getDatabase());
     }
 
     @Override
-    public Range<String> getMinMaxId(String defaultMinId, String defaultMaxId, String collection) {
-        String minId = defaultMinId;
-        String maxId = defaultMaxId;
+    public Range<String> getMinMaxId() {
+        String minId = queryConfig.getMinId();
+        String maxId = queryConfig.getMaxId();
         if (StringUtils.isEmpty(minId)) {
-            Document min = mongoDatabase.getCollection(collection)
+            Document min = mongoDatabase.getCollection(queryConfig.getTable())
                 .find()
                 .projection(Projections.include("_id"))
                 .sort(Sorts.ascending("_id"))
@@ -45,7 +53,7 @@ public class MongoQuerySplitRunner implements QuerySplitRunner {
             minId = min.get("_id").toString();
         }
         if (StringUtils.isEmpty(maxId)) {
-            Document max = mongoDatabase.getCollection(collection)
+            Document max = mongoDatabase.getCollection(queryConfig.getTable())
                 .find()
                 .projection(Projections.include("_id"))
                 .sort(Sorts.descending("_id"))
@@ -57,7 +65,8 @@ public class MongoQuerySplitRunner implements QuerySplitRunner {
     }
 
     @Override
-    public List<String> splitId(Range<String> range, int step) {
+    public List<String> splitId(Range<String> range) {
+        int step = queryConfig.getStep();
         int lowerTime = Integer.valueOf(range.lowerEndpoint().substring(0, 8), 16);
         int upperTime = Integer.valueOf(range.upperEndpoint().substring(0, 8), 16);
         String suffix = range.lowerEndpoint().substring(8);
@@ -71,11 +80,12 @@ public class MongoQuerySplitRunner implements QuerySplitRunner {
         return ids;
     }
 
-    public List<Record> query(QuerySplit split) {
+    @Override
+    public QuerySplit query(Range<String> range) {
         List<Record> records = new ArrayList<>();
-        MongoCursor<Document> cursor = mongoDatabase.getCollection(split.getTable())
-            .find(and(gte("_id", new ObjectId(split.getRange().lowerEndpoint())),
-                lte("_id", new ObjectId(split.getRange().upperEndpoint()))))
+        MongoCursor<Document> cursor = mongoDatabase.getCollection(queryConfig.getTable())
+            .find(and(gte("_id", new ObjectId(range.lowerEndpoint())),
+                lte("_id", new ObjectId(range.upperEndpoint()))))
             .iterator();
         while (cursor.hasNext()) {
             Document object = cursor.next();
@@ -85,7 +95,11 @@ public class MongoQuerySplitRunner implements QuerySplitRunner {
             }
             records.add(record);
         }
-        log.info("query split:{}", split.getRange());
-        return records;
+        QuerySplit querySplit = new QuerySplit();
+        querySplit.setRange(range);
+        querySplit.setRecords(records);
+        metric.getSize().addAndGet(querySplit.getRecords().size());
+        log.info("query split:{}", range);
+        return querySplit;
     }
 }

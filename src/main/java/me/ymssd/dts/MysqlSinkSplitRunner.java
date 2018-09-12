@@ -1,6 +1,7 @@
 package me.ymssd.dts;
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.Range;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -20,6 +21,12 @@ import org.apache.commons.dbutils.QueryRunner;
 public class MysqlSinkSplitRunner implements SinkSplitRunner {
 
     public static final String KEYWORD_ESCAPE = "`";
+
+    private Metric metric;
+
+    public MysqlSinkSplitRunner(Metric metric) {
+        this.metric = metric;
+    }
 
     public void sink(SinkSplit split) {
         Connection connection = null;
@@ -56,13 +63,14 @@ public class MysqlSinkSplitRunner implements SinkSplitRunner {
             runner.batch(connection, sb.toString(), params);
             connection.commit();
 
+            metric.getSankSize().addAndGet(split.getRecords().size());
             log.info("sink size:{}", split.getRecords().size());
         } catch (SQLException e) {
+            metric.getFailedRange().add(split.getRange());
             log.error("fail sink split", e);
         } finally {
             DbUtils.closeQuietly(connection);
         }
-
     }
 
     private List<String> getColumnNames(SinkSplit split) throws SQLException {

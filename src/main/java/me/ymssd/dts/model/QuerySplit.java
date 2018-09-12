@@ -1,6 +1,7 @@
 package me.ymssd.dts.model;
 
 import com.google.common.collect.Range;
+import java.util.List;
 import lombok.Data;
 
 /**
@@ -10,6 +11,6 @@ import lombok.Data;
 @Data
 public class QuerySplit {
 
-    private String table;
     private Range<String> range;
+    private List<Record> records;
 }

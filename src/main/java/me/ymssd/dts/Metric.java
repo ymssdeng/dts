@@ -1,5 +1,8 @@
 package me.ymssd.dts;
 
+import com.google.common.collect.Range;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import lombok.Data;
 
@@ -17,6 +20,7 @@ public class Metric {
     private long sinkStartTime;
     private long sinkEndTime;
     private AtomicLong sankSize = new AtomicLong(0);
+    private List<Range<String>> failedRange = new ArrayList<>();
 
     public void reset() {
         setQueryStartTime(0);
@@ -25,5 +29,6 @@ public class Metric {
         setSinkStartTime(0);
         setSinkEndTime(0);
         getSankSize().set(0);
+        failedRange.clear();
     }
 }
