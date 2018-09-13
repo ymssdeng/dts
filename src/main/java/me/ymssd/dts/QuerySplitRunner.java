@@ -12,7 +12,7 @@ public interface QuerySplitRunner {
 
     Range<String> getMinMaxId();
 
-    List<String> splitId(Range<String> range);
+    List<Range<String>> splitRange(Range<String> range);
 
     Split query(Range<String> range);
 }

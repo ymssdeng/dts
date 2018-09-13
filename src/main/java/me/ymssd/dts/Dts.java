@@ -83,14 +83,17 @@ public class Dts {
 
     public void start() {
         metric.setQueryStartTime(System.currentTimeMillis());
-        Range<String> range = querySplitRunner.getMinMaxId();
-        List<String> ids = querySplitRunner.splitId(range);
+        List<Range<String>> ranges = queryConfig.getRangeList();
+        if (ranges == null) {
+            Range<String> range = querySplitRunner.getMinMaxId();
+            ranges = querySplitRunner.splitRange(range);
+        }
 
         List<CompletableFuture> queryFutures = new ArrayList<>();
         List<CompletableFuture> sinkFutures = new ArrayList<>();
-        for (int i = 0; i < ids.size() - 1; i++) {
-            final String lower = ids.get(i);
-            final String upper = ids.get(i + 1);
+        for (Range<String> range : ranges) {
+            final String lower = range.lowerEndpoint();
+            final String upper = range.upperEndpoint();
 
             CompletableFuture future = CompletableFuture
                 .supplyAsync(() -> querySplitRunner.query(Range.closed(lower, upper)), queryExecutor)

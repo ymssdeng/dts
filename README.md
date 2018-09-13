@@ -3,8 +3,8 @@
 
 DONE:
 - 仅支持auto_increment主键
+- 全量迁移时可指定输入ranges
 
 TODO:
-- 全量迁移时可指定输入ranges
 - 支持mongo增量迁移
 - 支持目标数据库分表

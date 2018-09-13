@@ -17,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.config.DtsConfig.QueryConfig;
 import me.ymssd.dts.model.Record;
 import me.ymssd.dts.model.Split;
-import org.apache.commons.lang.StringUtils;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 
@@ -41,42 +40,37 @@ public class MongoQuerySplitRunner implements QuerySplitRunner {
 
     @Override
     public Range<String> getMinMaxId() {
-        String minId = queryConfig.getMinId();
-        String maxId = queryConfig.getMaxId();
-        if (StringUtils.isEmpty(minId)) {
-            Document min = mongoDatabase.getCollection(queryConfig.getTable())
-                .find()
-                .projection(Projections.include("_id"))
-                .sort(Sorts.ascending("_id"))
-                .first();
-            minId = min.get("_id").toString();
-        }
-        if (StringUtils.isEmpty(maxId)) {
-            Document max = mongoDatabase.getCollection(queryConfig.getTable())
-                .find()
-                .projection(Projections.include("_id"))
-                .sort(Sorts.descending("_id"))
-                .first();
-            maxId = max.get("_id").toString();
-        }
-
-        return Range.closed(minId, maxId);
+        final String field = "_id";
+        Document min = mongoDatabase.getCollection(queryConfig.getTable())
+            .find()
+            .projection(Projections.include(field))
+            .sort(Sorts.ascending(field))
+            .first();
+        Document max = mongoDatabase.getCollection(queryConfig.getTable())
+            .find()
+            .projection(Projections.include(field))
+            .sort(Sorts.descending(field))
+            .first();
+        return Range.closed(min.get(field).toString(), max.get(field).toString());
     }
 
     @Override
-    public List<String> splitId(Range<String> range) {
+    public List<Range<String>> splitRange(Range<String> range) {
         int step = queryConfig.getStep();
         int lowerTime = Integer.valueOf(range.lowerEndpoint().substring(0, 8), 16);
         int upperTime = Integer.valueOf(range.upperEndpoint().substring(0, 8), 16);
         String suffix = range.lowerEndpoint().substring(8);
-        List<String> ids = new ArrayList<>();
-        ids.add(range.lowerEndpoint());
+        List<Range<String>> ranges = new ArrayList<>();
+        String lower = range.lowerEndpoint(), upper;
         while (lowerTime + step < upperTime) {
             lowerTime += step;
-            ids.add(Integer.toHexString(lowerTime) + suffix);
+            upper = Integer.toHexString(lowerTime) + suffix;
+            ranges.add(Range.closed(lower, upper));
+            lower = upper;
         }
-        ids.add(range.upperEndpoint());
-        return ids;
+        upper = range.upperEndpoint();
+        ranges.add(Range.closed(lower, upper));
+        return ranges;
     }
 
     @Override
