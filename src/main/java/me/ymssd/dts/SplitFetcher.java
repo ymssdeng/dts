@@ -8,11 +8,12 @@ import me.ymssd.dts.model.Split;
  * @author denghui
  * @create 2018/9/10
  */
-public interface QuerySplitRunner {
+public interface SplitFetcher {
 
     Range<String> getMinMaxId();
 
     List<Range<String>> splitRange(Range<String> range);
 
     Split query(Range<String> range);
+
 }

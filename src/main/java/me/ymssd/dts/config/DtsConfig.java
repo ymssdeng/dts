@@ -16,20 +16,21 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class DtsConfig {
 
-    private QueryConfig query;
+    private Mode mode;
+    private FetchConfig fetch;
     private SinkConfig sink;
     private Map<String, String> mapping;
 
     @Data
     @NoArgsConstructor
-    public static class QueryConfig {
+    public static class FetchConfig {
 
         private MongoDataSource mongo;
         private MysqlDataSource mysql;
         private String table;
         private List<List<String>> ranges;
         private int step = 10000;
-        private int threadCount = 5;
+        private int threadCount = 1;
 
         public List<Range<String>> getRangeList() {
             if (ranges == null) {
@@ -65,8 +66,11 @@ public class DtsConfig {
         private String username;
         private String password;
         private String table;
-        private int threadCount = 5;
+        private int threadCount = 1;
         private int batchSize = 100;
     }
 
+    public enum Mode {
+        dump, sync
+    }
 }

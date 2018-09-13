@@ -22,7 +22,8 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.config.DtsConfig;
-import me.ymssd.dts.config.DtsConfig.QueryConfig;
+import me.ymssd.dts.config.DtsConfig.FetchConfig;
+import me.ymssd.dts.config.DtsConfig.Mode;
 import me.ymssd.dts.config.DtsConfig.SinkConfig;
 import me.ymssd.dts.model.Record;
 import me.ymssd.dts.model.Split;
@@ -35,32 +36,40 @@ import me.ymssd.dts.model.Split;
 public class Dts {
     private static final DateTimeFormatter YMDHMS= DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private QueryConfig queryConfig;
+    private DtsConfig dtsConfig;
+    private FetchConfig fetchConfig;
     private SinkConfig sinkConfig;
     private ExecutorService queryExecutor;
     private ExecutorService mapExecutor;
     private ExecutorService sinkExecutor;
-    private QuerySplitRunner querySplitRunner;
+    private SplitFetcher splitFetcher;
     private FieldMapper fieldMapper;
-    private SinkSplitRunner sinkSplitRunner;
+    private SplitSinker splitSinker;
     private HikariDataSource sinkDataSource;
     private MongoClient mongoClient;
     private Metric metric;
+    private ReplicaLogFetcher replicaLogFetcher;
+    private ReplicaLogSinker replicaLogSinker;
 
     public Dts(DtsConfig dtsConfig) throws SQLException {
-        Preconditions.checkNotNull(dtsConfig.getQuery());
+        Preconditions.checkNotNull(dtsConfig.getMode());
+        Preconditions.checkNotNull(dtsConfig.getFetch());
         Preconditions.checkNotNull(dtsConfig.getSink());
-        this.queryConfig = dtsConfig.getQuery();
+        this.dtsConfig = dtsConfig;
+        this.fetchConfig = dtsConfig.getFetch();
         this.sinkConfig = dtsConfig.getSink();
         //metric
         metric = new Metric();
 
-        //query
-        if (queryConfig.getMongo() != null) {
-            MongoClient mongoClient = MongoClients.create(queryConfig.getMongo().getUrl());
-            querySplitRunner = new MongoQuerySplitRunner(mongoClient, queryConfig, metric);
+        //fetch
+        if (fetchConfig.getMongo() != null) {
+            mongoClient = MongoClients.create(fetchConfig.getMongo().getUrl());
+            if (dtsConfig.getMode() == Mode.dump) {
+                splitFetcher = new SplitMongoFetcher(mongoClient, fetchConfig, metric);
+            } else if (dtsConfig.getMode() == Mode.sync) {
+                replicaLogFetcher = new OplogFetcher(mongoClient, fetchConfig);
+            }
         }
-        Preconditions.checkNotNull(querySplitRunner);
         fieldMapper = new FieldMapper(dtsConfig.getMapping());
 
         //sink
@@ -69,24 +78,43 @@ public class Dts {
         hikariConfig.setUsername(sinkConfig.getUsername());
         hikariConfig.setPassword(sinkConfig.getPassword());
         sinkDataSource = new HikariDataSource(hikariConfig);
-        sinkSplitRunner = new MysqlSinkSplitRunner(sinkDataSource, sinkConfig, metric);
+        if (dtsConfig.getMode() == Mode.dump) {
+            splitSinker = new SplitMysqlSinker(sinkDataSource, sinkConfig, metric);
+        } else if (dtsConfig.getMode() == Mode.sync) {
+            replicaLogSinker = new ReplicaLogMysqlSinker();
+        }
 
         //线程池
         ThreadFactoryBuilder builder = new ThreadFactoryBuilder();
-        builder.setNameFormat("query-runner-%d");
-        queryExecutor = Executors.newFixedThreadPool(queryConfig.getThreadCount(), builder.build());
+        builder.setNameFormat("fetch-runner-%d");
+        queryExecutor = Executors.newFixedThreadPool(fetchConfig.getThreadCount(), builder.build());
         builder.setNameFormat("map-runner-%d");
-        mapExecutor = Executors.newFixedThreadPool(queryConfig.getThreadCount(), builder.build());
+        mapExecutor = Executors.newFixedThreadPool(fetchConfig.getThreadCount(), builder.build());
         builder.setNameFormat("sink-runner-%d");
         sinkExecutor = Executors.newFixedThreadPool(sinkConfig.getThreadCount(), builder.build());
     }
 
     public void start() {
-        metric.setQueryStartTime(System.currentTimeMillis());
-        List<Range<String>> ranges = queryConfig.getRangeList();
+        metric.setFetchStartTime(System.currentTimeMillis());
+        if (dtsConfig.getMode() == Mode.dump) {
+            startDump();
+        } else if (dtsConfig.getMode() == Mode.sync) {
+            startSync();
+        }
+    }
+
+    private void startSync() {
+        CompletableFuture.runAsync(() -> {
+            replicaLogFetcher.run(replicaLog ->
+                CompletableFuture.runAsync(() -> replicaLogSinker.sink(replicaLog), sinkExecutor));
+        }, queryExecutor);
+    }
+
+    private void startDump() {
+        List<Range<String>> ranges = fetchConfig.getRangeList();
         if (ranges == null) {
-            Range<String> range = querySplitRunner.getMinMaxId();
-            ranges = querySplitRunner.splitRange(range);
+            Range<String> range = splitFetcher.getMinMaxId();
+            ranges = splitFetcher.splitRange(range);
         }
 
         List<CompletableFuture> queryFutures = new ArrayList<>();
@@ -96,7 +124,7 @@ public class Dts {
             final String upper = range.upperEndpoint();
 
             CompletableFuture future = CompletableFuture
-                .supplyAsync(() -> querySplitRunner.query(Range.closed(lower, upper)), queryExecutor)
+                .supplyAsync(() -> splitFetcher.query(Range.closed(lower, upper)), queryExecutor)
                 .thenApplyAsync(querySplit -> {
                     return Lists.partition(querySplit.getRecords(), sinkConfig.getBatchSize())
                         .stream()
@@ -118,7 +146,7 @@ public class Dts {
                 }, mapExecutor)
                 .thenAcceptAsync(sinkSplits -> {
                     for (Split sinkSplit : sinkSplits) {
-                        sinkFutures.add(CompletableFuture.runAsync(() -> sinkSplitRunner.sink(sinkSplit), sinkExecutor));
+                        sinkFutures.add(CompletableFuture.runAsync(() -> splitSinker.sink(sinkSplit), sinkExecutor));
                         if (metric.getSinkStartTime() == 0) {
                             metric.setSinkStartTime(System.currentTimeMillis());
                         }
@@ -129,7 +157,7 @@ public class Dts {
 
         CompletableFuture.allOf(queryFutures.toArray(new CompletableFuture[0]))
             .whenComplete((v, t) -> {
-                metric.setQueryEndTime(System.currentTimeMillis());
+                metric.setFetchEndTime(System.currentTimeMillis());
                 CompletableFuture.allOf(sinkFutures.toArray(new CompletableFuture[0]))
                     .whenComplete((v2, t2) -> {
                         metric.setSinkEndTime(System.currentTimeMillis());
@@ -144,11 +172,11 @@ public class Dts {
 
     private void print() {
         ZoneId zoneId = ZoneId.systemDefault();
-        log.info("-->queryStartTime:{}", YMDHMS.format(ofInstant(ofEpochMilli(metric.getQueryStartTime()), zoneId)));
-        log.info("-->queryEndTime:{}", YMDHMS.format(ofInstant(ofEpochMilli(metric.getQueryEndTime()), zoneId)));
-        log.info("-->size:{}", metric.getSize());
+        log.info("-->fetchStartTime:{}", YMDHMS.format(ofInstant(ofEpochMilli(metric.getFetchStartTime()), zoneId)));
+        log.info("-->fetchEndTime:{}", YMDHMS.format(ofInstant(ofEpochMilli(metric.getFetchEndTime()), zoneId)));
+        log.info("-->fetchSize:{}", metric.getFetchSize());
         log.info("-->sinkStartTime:{}", YMDHMS.format(ofInstant(ofEpochMilli(metric.getSinkStartTime()), zoneId)));
         log.info("-->sinkEndTime:{}", YMDHMS.format(ofInstant(ofEpochMilli(metric.getSinkEndTime()), zoneId)));
-        log.info("-->sankSize:{}", metric.getSankSize());
+        log.info("-->sinkSize:{}", metric.getSinkSize());
     }
 }

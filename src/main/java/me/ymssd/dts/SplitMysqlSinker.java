@@ -24,7 +24,7 @@ import org.apache.commons.lang.StringUtils;
  * @create 2018/9/6
  */
 @Slf4j
-public class MysqlSinkSplitRunner implements SinkSplitRunner {
+public class SplitMysqlSinker implements SplitSinker {
 
     public static final String KEYWORD_ESCAPE = "`";
 
@@ -35,7 +35,7 @@ public class MysqlSinkSplitRunner implements SinkSplitRunner {
     private List<ColumnMetaData> cmdList;
     private List<String> columnNames;
 
-    public MysqlSinkSplitRunner(DataSource dataSource, SinkConfig sinkConfig, Metric metric) throws SQLException {
+    public SplitMysqlSinker(DataSource dataSource, SinkConfig sinkConfig, Metric metric) throws SQLException {
         this.dataSource = dataSource;
         this.sinkConfig = sinkConfig;
         this.metric = metric;
@@ -79,8 +79,8 @@ public class MysqlSinkSplitRunner implements SinkSplitRunner {
             runner.batch(connection, sb.toString(), params);
             connection.commit();
 
-            metric.getSankSize().addAndGet(split.getRecords().size());
-            log.info("sink size:{}", split.getRecords().size());
+            metric.getSinkSize().addAndGet(split.getRecords().size());
+            log.info("sink fetchSize:{}", split.getRecords().size());
         } catch (SQLException e) {
             metric.getFailedRange().add(split.getRange());
             log.error("fail sink split", e);
