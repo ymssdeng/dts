@@ -1,6 +1,6 @@
 package me.ymssd.dts;
 
-import me.ymssd.dts.model.SinkSplit;
+import me.ymssd.dts.model.Split;
 
 /**
  * @author denghui
@@ -8,5 +8,5 @@ import me.ymssd.dts.model.SinkSplit;
  */
 public interface SinkSplitRunner {
 
-    void sink(SinkSplit sinkSplit);
+    void sink(Split split);
 }

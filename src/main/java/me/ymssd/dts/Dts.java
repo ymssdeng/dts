@@ -11,6 +11,7 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.sql.SQLException;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -24,7 +25,7 @@ import me.ymssd.dts.config.DtsConfig;
 import me.ymssd.dts.config.DtsConfig.QueryConfig;
 import me.ymssd.dts.config.DtsConfig.SinkConfig;
 import me.ymssd.dts.model.Record;
-import me.ymssd.dts.model.SinkSplit;
+import me.ymssd.dts.model.Split;
 
 /**
  * @author denghui
@@ -46,7 +47,7 @@ public class Dts {
     private MongoClient mongoClient;
     private Metric metric;
 
-    public Dts(DtsConfig dtsConfig) {
+    public Dts(DtsConfig dtsConfig) throws SQLException {
         Preconditions.checkNotNull(dtsConfig.getQuery());
         Preconditions.checkNotNull(dtsConfig.getSink());
         this.queryConfig = dtsConfig.getQuery();
@@ -68,7 +69,7 @@ public class Dts {
         hikariConfig.setUsername(sinkConfig.getUsername());
         hikariConfig.setPassword(sinkConfig.getPassword());
         sinkDataSource = new HikariDataSource(hikariConfig);
-        sinkSplitRunner = new MysqlSinkSplitRunner(metric);
+        sinkSplitRunner = new MysqlSinkSplitRunner(sinkDataSource, sinkConfig, metric);
 
         //线程池
         ThreadFactoryBuilder builder = new ThreadFactoryBuilder();
@@ -104,18 +105,16 @@ public class Dts {
                             if (mappedRecords.isEmpty()) {
                                 return null;
                             }
-                            SinkSplit sinkSplit = new SinkSplit();
+                            Split sinkSplit = new Split();
                             sinkSplit.setRecords(mappedRecords);
                             sinkSplit.setRange(querySplit.getRange());
-                            sinkSplit.setDataSource(sinkDataSource);
-                            sinkSplit.setTable(sinkConfig.getTable());
                             return sinkSplit;
                         })
                         .filter(r -> r != null)
                         .collect(Collectors.toList());
                 }, mapExecutor)
                 .thenAcceptAsync(sinkSplits -> {
-                    for (SinkSplit sinkSplit : sinkSplits) {
+                    for (Split sinkSplit : sinkSplits) {
                         sinkFutures.add(CompletableFuture.runAsync(() -> sinkSplitRunner.sink(sinkSplit), sinkExecutor));
                         if (metric.getSinkStartTime() == 0) {
                             metric.setSinkStartTime(System.currentTimeMillis());

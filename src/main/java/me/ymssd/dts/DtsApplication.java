@@ -1,5 +1,6 @@
 package me.ymssd.dts;
 
+import java.sql.SQLException;
 import me.ymssd.dts.config.DtsConfig;
 import org.yaml.snakeyaml.Yaml;
 
@@ -11,7 +12,7 @@ public class DtsApplication {
 
     private static final String CONFIG_FILE = "dts.yaml";
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws SQLException {
         DtsApplication app = new DtsApplication();
         Yaml yaml = new Yaml();
         DtsConfig dtsConfig = yaml.loadAs(app.getClass().getClassLoader().getResourceAsStream(CONFIG_FILE),
@@ -20,5 +21,4 @@ public class DtsApplication {
         Dts dts = new Dts(dtsConfig);
         dts.start();
     }
-
 }

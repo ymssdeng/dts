@@ -6,7 +6,6 @@ import static com.mongodb.client.model.Filters.lte;
 
 import com.google.common.collect.Range;
 import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Projections;
@@ -16,8 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.config.DtsConfig.QueryConfig;
-import me.ymssd.dts.model.QuerySplit;
 import me.ymssd.dts.model.Record;
+import me.ymssd.dts.model.Split;
 import org.apache.commons.lang.StringUtils;
 import org.bson.Document;
 import org.bson.types.ObjectId;
@@ -81,7 +80,7 @@ public class MongoQuerySplitRunner implements QuerySplitRunner {
     }
 
     @Override
-    public QuerySplit query(Range<String> range) {
+    public Split query(Range<String> range) {
         List<Record> records = new ArrayList<>();
         MongoCursor<Document> cursor = mongoDatabase.getCollection(queryConfig.getTable())
             .find(and(gte("_id", new ObjectId(range.lowerEndpoint())),
@@ -95,11 +94,11 @@ public class MongoQuerySplitRunner implements QuerySplitRunner {
             }
             records.add(record);
         }
-        QuerySplit querySplit = new QuerySplit();
-        querySplit.setRange(range);
-        querySplit.setRecords(records);
-        metric.getSize().addAndGet(querySplit.getRecords().size());
+        Split split = new Split();
+        split.setRange(range);
+        split.setRecords(records);
+        metric.getSize().addAndGet(split.getRecords().size());
         log.info("query split:{}", range);
-        return querySplit;
+        return split;
     }
 }

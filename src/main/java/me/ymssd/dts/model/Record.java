@@ -9,4 +9,12 @@ import java.util.ArrayList;
  */
 public class Record extends ArrayList<SimpleEntry<String, Object>> {
 
+    public Object getValue(String key) {
+        for (SimpleEntry<String, Object> field : this) {
+            if (key.equals(field.getKey())) {
+                return field.getValue();
+            }
+        }
+        return null;
+    }
 }

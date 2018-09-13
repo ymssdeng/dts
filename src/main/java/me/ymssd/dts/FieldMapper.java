@@ -3,13 +3,17 @@ package me.ymssd.dts;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.function.Function;
+import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.model.Record;
+import org.apache.commons.lang.StringUtils;
 
 /**
  * @author denghui
  * @create 2018/9/6
  */
+@Slf4j
 public class FieldMapper implements Function<Record, Record> {
 
     private Map<String, String> mapping = new HashMap<>();
@@ -32,14 +36,12 @@ public class FieldMapper implements Function<Record, Record> {
         Record mappedRecord = new Record();
         for (SimpleEntry<String, Object> field : record) {
             String mappedKey = mapping.get(field.getKey());
-            if (mappedKey != null) {
+            if (StringUtils.isNotEmpty(mappedKey)) {
                 Object value = field.getValue();
                 if (converters.containsKey(field.getKey())) {
                     value = converters.get(field.getKey()).apply(field.getValue());
                 }
-                if (value != null) {
-                    mappedRecord.add(new SimpleEntry<>(mappedKey.toString(), value));
-                }
+                mappedRecord.add(new SimpleEntry<>(mappedKey.toString(), value));
             }
         }
         return mappedRecord.isEmpty() ? null : mappedRecord;
