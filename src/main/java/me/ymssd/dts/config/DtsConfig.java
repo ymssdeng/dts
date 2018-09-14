@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import me.ymssd.dts.AbstractDts.Style;
 
 /**
  * @author denghui
@@ -16,6 +17,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class DtsConfig {
 
+    private Style style = Style.Java8;
     private Mode mode;
     private FetchConfig fetch;
     private SinkConfig sink;

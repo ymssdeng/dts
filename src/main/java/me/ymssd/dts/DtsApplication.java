@@ -1,6 +1,7 @@
 package me.ymssd.dts;
 
 import java.sql.SQLException;
+import me.ymssd.dts.AbstractDts.Style;
 import me.ymssd.dts.config.DtsConfig;
 import org.yaml.snakeyaml.Yaml;
 
@@ -18,7 +19,12 @@ public class DtsApplication {
         DtsConfig dtsConfig = yaml.loadAs(app.getClass().getClassLoader().getResourceAsStream(CONFIG_FILE),
             DtsConfig.class);
 
-        Dts dts = new Dts(dtsConfig);
+        AbstractDts dts = null;
+        if (dtsConfig.getStyle() == Style.Java8) {
+            dts = new Java8Dts(dtsConfig);
+        } else if (dtsConfig.getStyle() == Style.RxJava) {
+            dts = new RxJavaDts(dtsConfig);
+        }
         dts.start();
     }
 }
