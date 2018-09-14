@@ -9,6 +9,7 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.model.Sorts;
+import java.time.Instant;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.Map.Entry;
 import java.util.function.Consumer;
@@ -28,52 +29,84 @@ public class OplogFetcher implements ReplicaLogFetcher {
 
     private FetchConfig fetchConfig;
     private MongoClient mongoClient;
+    private Metric metric;
 
-    public OplogFetcher(MongoClient mongoClient, FetchConfig fetchConfig) {
+    public OplogFetcher(MongoClient mongoClient, FetchConfig fetchConfig, Metric metric) {
         this.fetchConfig = fetchConfig;
         this.mongoClient = mongoClient;
+        this.metric = metric;
     }
 
-    @Override
-    public void run(Consumer<ReplicaLog> consumer) {
-        MongoCollection<Document> collection = mongoClient.getDatabase("local")
-            .getCollection("oplog.rs");
-        MongoCursor<Document> cursor = collection.find()
+    private MongoCollection<Document> getOplogCollection() {
+        return mongoClient.getDatabase("local").getCollection("oplog.rs");
+    }
+
+    private BsonTimestamp getStartTs() {
+        if (fetchConfig.getMongo().getStartTime() > 0) {
+            return new BsonTimestamp(fetchConfig.getMongo().getStartTime(), 1);
+        }
+        MongoCursor<Document> cursor = getOplogCollection()
+            .find()
             .sort(Sorts.descending("$natural"))
             .limit(1)
             .iterator();
         if (!cursor.hasNext()) {
-            log.error("no oplog find");
-            return;
+            throw new RuntimeException("no oplog find");
         }
-
         Document oplog = cursor.next();
         BsonTimestamp ts = (BsonTimestamp) oplog.get("ts");
+        return ts;
+    }
+
+    @Override
+    public void run(Consumer<ReplicaLog> consumer) {
+        /**
+         * https://docs.mongodb.com/manual/core/tailable-cursors/
+         * Because tailable cursors do not use indexes, the initial scan for
+         * the query may be expensive; but, after initially exhausting the cursor,
+         * subsequent retrievals of the newly added documents are inexpensive.
+         */
+        BsonTimestamp ts = getStartTs();
         String ns = fetchConfig.getMongo().getDatabase() + "." + fetchConfig.getTable();
-        cursor = collection.find(and(eq("ns", ns), gt("ts", ts)))
+        log.info("initial scan tailable cursor, ns:{}, ts:{}", ns, ts);
+
+        MongoCursor<Document> cursor = getOplogCollection()
+            .find(and(eq("ns", ns), gt("ts", ts)))
             .cursorType(CursorType.TailableAwait)
             .noCursorTimeout(true)
             .iterator();
-        log.info("start to fetch oplog, ns:{}, ts:{}", ns, ts);
+        log.info("start to fetch oplog");
         while (true) {
-            oplog = cursor.tryNext();
+            int endTime = fetchConfig.getMongo().getEndTime();
+            if (endTime > 0 && Instant.now().getEpochSecond() >= endTime) {
+                log.info("time to exit oplog fetcher");
+                break;
+            }
+            Document oplog = cursor.tryNext();
             if (oplog != null) {
                 log.debug("{}", oplog);
-                ReplicaLog replicaLog = new ReplicaLog();
+                metric.getFetchSize().incrementAndGet();
                 OplogOp op = OplogOp.find(oplog.getString("op"));
-                replicaLog.setOp(op);
                 Record record = new Record();
-                replicaLog.setRecord(record);
+                Document data = null, o = (Document) oplog.get("o"), o2 = (Document) oplog.get("o2");
                 if (op == OplogOp.INSERT) {
-                    for (Entry<String, Object> entry : ((Document) oplog.get("o")).entrySet()) {
+                    data = o;
+                } else if (op == OplogOp.UPDATE) {
+                    //data = (Document) o.get("$set");
+                    //record.add(new SimpleEntry<>("_id", o2.getObjectId("_id")));
+                }
+                if (data != null) {
+                    for (Entry<String, Object> entry : data.entrySet()) {
                         SimpleEntry field = new SimpleEntry(entry.getKey(), entry.getValue());
                         record.add(field);
                     }
-                } else if (op == OplogOp.UPDATE) {
-
+                    ReplicaLog replicaLog = new ReplicaLog();
+                    replicaLog.setOp(op);
+                    replicaLog.setRecord(record);
+                    consumer.accept(replicaLog);
                 }
-                consumer.accept(replicaLog);
             }
         }
+        System.exit(0);
     }
 }

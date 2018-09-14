@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.config.DtsConfig;
@@ -67,7 +68,7 @@ public class Dts {
             if (dtsConfig.getMode() == Mode.dump) {
                 splitFetcher = new SplitMongoFetcher(mongoClient, fetchConfig, metric);
             } else if (dtsConfig.getMode() == Mode.sync) {
-                replicaLogFetcher = new OplogFetcher(mongoClient, fetchConfig);
+                replicaLogFetcher = new OplogFetcher(mongoClient, fetchConfig, metric);
             }
         }
         fieldMapper = new FieldMapper(dtsConfig.getMapping());
@@ -81,7 +82,7 @@ public class Dts {
         if (dtsConfig.getMode() == Mode.dump) {
             splitSinker = new SplitMysqlSinker(sinkDataSource, sinkConfig, metric);
         } else if (dtsConfig.getMode() == Mode.sync) {
-            replicaLogSinker = new ReplicaLogMysqlSinker();
+            replicaLogSinker = new ReplicaLogMysqlSinker(sinkDataSource, sinkConfig, metric);
         }
 
         //线程池
@@ -92,6 +93,10 @@ public class Dts {
         mapExecutor = Executors.newFixedThreadPool(fetchConfig.getThreadCount(), builder.build());
         builder.setNameFormat("sink-runner-%d");
         sinkExecutor = Executors.newFixedThreadPool(sinkConfig.getThreadCount(), builder.build());
+        builder.setNameFormat("shutdown-hook");
+        ThreadFactory shutdownHookFactory = builder.build();
+        Runtime.getRuntime().addShutdownHook(shutdownHookFactory.newThread(() -> mongoClient.close()));
+        Runtime.getRuntime().addShutdownHook(shutdownHookFactory.newThread(() -> sinkDataSource.close()));
     }
 
     public void start() {
@@ -106,7 +111,14 @@ public class Dts {
     private void startSync() {
         CompletableFuture.runAsync(() -> {
             replicaLogFetcher.run(replicaLog ->
-                CompletableFuture.runAsync(() -> replicaLogSinker.sink(replicaLog), sinkExecutor));
+                CompletableFuture.runAsync(() -> {
+                    Record mappedRecord = fieldMapper.apply(replicaLog.getRecord());
+                    if (mappedRecord == null) {
+                        return;
+                    }
+                    replicaLog.setRecord(mappedRecord);
+                    replicaLogSinker.sink(replicaLog);
+                }, sinkExecutor));
         }, queryExecutor);
     }
 
@@ -163,8 +175,6 @@ public class Dts {
                         metric.setSinkEndTime(System.currentTimeMillis());
                         print();
 
-                        mongoClient.close();
-                        sinkDataSource.close();
                         System.exit(0);
                     });
             });

@@ -4,8 +4,8 @@
 DONE:
 - 仅支持auto_increment主键
 - 全量迁移时可指定输入ranges
+- 支持mongo增量迁移(Insert)
 
 TODO:
-- 支持mongo增量迁移(Insert/Update)
-- 增量迁移支持设置停止时间
+- 增量迁移支持设置起始和停止时间
 - 支持目标数据库分表

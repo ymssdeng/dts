@@ -50,6 +50,8 @@ public class DtsConfig {
         public static class MongoDataSource {
             private String url;
             private String database;
+            private int startTime;
+            private int endTime;
         }
 
         @Data
