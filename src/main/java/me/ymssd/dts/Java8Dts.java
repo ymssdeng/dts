@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -46,26 +47,22 @@ public class Java8Dts extends AbstractDts {
         List<CompletableFuture> sinkFutures = new ArrayList<>();
         for (Range<String> range : ranges) {
             CompletableFuture future = CompletableFuture
-                .supplyAsync(() -> splitFetcher.query(range), fetchExecutor)
-                .thenApplyAsync(querySplit -> {
-                    return Lists.partition(querySplit.getRecords(), sinkConfig.getBatchSize())
+                .supplyAsync(() -> {
+                    Split querySplit = splitFetcher.query(range);
+                    List<Record> mappedRecords = querySplit.getRecords().stream()
+                        .map(r -> fieldMapper.apply(r))
+                        .filter(r -> r != null)
+                        .collect(Collectors.toList());
+                    return Lists.partition(mappedRecords, sinkConfig.getBatchSize())
                         .stream()
                         .map(partitionRecords -> {
-                            List<Record> mappedRecords = partitionRecords.stream()
-                                .map(r -> fieldMapper.apply(r))
-                                .filter(r -> r != null)
-                                .collect(Collectors.toList());
-                            if (mappedRecords.isEmpty()) {
-                                return null;
-                            }
                             Split sinkSplit = new Split();
-                            sinkSplit.setRecords(mappedRecords);
+                            sinkSplit.setRecords(partitionRecords);
                             sinkSplit.setRange(querySplit.getRange());
                             return sinkSplit;
                         })
-                        .filter(r -> r != null)
                         .collect(Collectors.toList());
-                }, mapExecutor)
+                }, fetchExecutor)
                 .thenAcceptAsync(sinkSplits -> {
                     for (Split sinkSplit : sinkSplits) {
                         sinkFutures.add(CompletableFuture.runAsync(() -> splitSinker.sink(sinkSplit), sinkExecutor));

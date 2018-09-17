@@ -35,7 +35,6 @@ public abstract class AbstractDts {
     protected FetchConfig fetchConfig;
     protected SinkConfig sinkConfig;
     protected ExecutorService fetchExecutor;
-    protected ExecutorService mapExecutor;
     protected ExecutorService sinkExecutor;
     protected SplitFetcher splitFetcher;
     protected FieldMapper fieldMapper;
@@ -83,8 +82,6 @@ public abstract class AbstractDts {
         ThreadFactoryBuilder builder = new ThreadFactoryBuilder();
         builder.setNameFormat("fetch-runner-%d");
         fetchExecutor = Executors.newFixedThreadPool(fetchConfig.getThreadCount(), builder.build());
-        builder.setNameFormat("map-runner-%d");
-        mapExecutor = Executors.newFixedThreadPool(fetchConfig.getThreadCount(), builder.build());
         builder.setNameFormat("sink-runner-%d");
         sinkExecutor = Executors.newFixedThreadPool(sinkConfig.getThreadCount(), builder.build());
         builder.setNameFormat("shutdown-hook");
