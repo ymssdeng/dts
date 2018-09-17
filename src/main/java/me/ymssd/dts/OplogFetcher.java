@@ -75,7 +75,7 @@ public class OplogFetcher implements ReplicaLogFetcher {
             .cursorType(CursorType.TailableAwait)
             .noCursorTimeout(true)
             .iterator();
-        log.info("start to fetch oplog");
+        log.info("initial scan finished, start to fetch oplog");
         while (true) {
             int endTime = fetchConfig.getMongo().getEndTime();
             if (endTime > 0 && Instant.now().getEpochSecond() >= endTime) {

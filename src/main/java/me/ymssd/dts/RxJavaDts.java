@@ -24,14 +24,14 @@ public class RxJavaDts extends AbstractDts {
         Observable.fromPublisher(subscriber -> {
             replicaLogFetcher.run((obj) -> subscriber.onNext(obj));
         })
-        .subscribeOn(Schedulers.from(sinkExecutor))
-//        .observeOn(Schedulers.from(fetchExecutor))
-        .map((obj -> {
+        .subscribeOn(Schedulers.from(fetchExecutor))
+        .flatMap(obj -> {
             ReplicaLog replicaLog = (ReplicaLog) obj;
             Record record = fieldMapper.apply(replicaLog.getRecord());
             replicaLog.setRecord(record);
-            return replicaLog;
-        }))
+            return Observable.just(replicaLog)
+                .observeOn(Schedulers.from(sinkExecutor));
+        })
         .filter(replicaLog -> replicaLog.getRecord() != null)
         .subscribe((replicaLog) -> replicaLogSinker.sink(replicaLog));
     }
