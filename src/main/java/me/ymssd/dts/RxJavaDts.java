@@ -1,12 +1,19 @@
 package me.ymssd.dts;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import io.reactivex.Observable;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.config.DtsConfig;
 import me.ymssd.dts.model.Record;
 import me.ymssd.dts.model.ReplicaLog;
+import me.ymssd.dts.model.Split;
 
 /**
  * @author denghui
@@ -23,21 +30,62 @@ public class RxJavaDts extends AbstractDts {
     protected void startSync() {
         Observable.fromPublisher(subscriber -> {
             replicaLogFetcher.run((obj) -> subscriber.onNext(obj));
-        })
-        .subscribeOn(Schedulers.from(fetchExecutor))
-        .flatMap(obj -> {
-            ReplicaLog replicaLog = (ReplicaLog) obj;
-            Record record = fieldMapper.apply(replicaLog.getRecord());
-            replicaLog.setRecord(record);
-            return Observable.just(replicaLog)
-                .observeOn(Schedulers.from(sinkExecutor));
-        })
-        .filter(replicaLog -> replicaLog.getRecord() != null)
-        .subscribe((replicaLog) -> replicaLogSinker.sink(replicaLog));
+            })
+            .subscribeOn(Schedulers.from(fetchExecutor))
+            .flatMap(obj -> {
+                ReplicaLog replicaLog = (ReplicaLog) obj;
+                Record record = fieldMapper.apply(replicaLog.getRecord());
+                replicaLog.setRecord(record);
+                return Observable.just(replicaLog)
+                    .observeOn(Schedulers.from(sinkExecutor));
+            })
+            .filter(replicaLog -> replicaLog.getRecord() != null)
+            .subscribe((replicaLog) -> replicaLogSinker.sink(replicaLog));
     }
 
     @Override
     protected void startDump() {
+        Observable.fromIterable(Arrays.asList(1,2,3,4,5,6,7,8,9))
+            .flatMap(i -> {
+                return Observable.just(i).subscribeOn(Schedulers.from(sinkExecutor));
+            })
+            .doOnComplete(() -> {log.info("done");})
+            .subscribe(i -> {
+                log.info("i={}", i);
+                Observable.just(i).subscribe(j-> {
+                    log.info("j={}", j);
+                });
+            });
 
+//        List<Range<String>> ranges = getRanges();
+//        Disposable disposable = Observable.fromIterable(ranges)
+//            .subscribeOn(Schedulers.from(fetchExecutor))
+//            .map(r -> splitFetcher.query(r))
+//            .flatMap(split -> {
+//                return Observable.fromIterable(Lists.partition(split.getRecords(), sinkConfig.getBatchSize())
+//                    .stream()
+//                    .map(partitionRecords -> {
+//                        List<Record> mappedRecords = partitionRecords.stream()
+//                            .map(r -> fieldMapper.apply(r))
+//                            .filter(r -> r != null)
+//                            .collect(Collectors.toList());
+//                        if (mappedRecords.isEmpty()) {
+//                            return null;
+//                        }
+//                        Split sinkSplit = new Split();
+//                        sinkSplit.setRecords(mappedRecords);
+//                        sinkSplit.setRange(split.getRange());
+//                        return sinkSplit;
+//                    })
+//                    .filter(r -> r != null)
+//                    .collect(Collectors.toList()))
+//                    .subscribeOn(Schedulers.from(sinkExecutor));
+//            })
+//            .subscribe(split -> {
+//                splitSinker.sink(split);
+//                if (metric.getSinkStartTime() == 0) {
+//                    metric.setSinkStartTime(System.currentTimeMillis());
+//                }
+//            });
     }
 }

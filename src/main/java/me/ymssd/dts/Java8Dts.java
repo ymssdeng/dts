@@ -40,20 +40,13 @@ public class Java8Dts extends AbstractDts {
 
     @Override
     protected void startDump() {
-        List<Range<String>> ranges = fetchConfig.getRangeList();
-        if (ranges == null) {
-            Range<String> range = splitFetcher.getMinMaxId();
-            ranges = splitFetcher.splitRange(range);
-        }
+        List<Range<String>> ranges = getRanges();
 
         List<CompletableFuture> queryFutures = new ArrayList<>();
         List<CompletableFuture> sinkFutures = new ArrayList<>();
         for (Range<String> range : ranges) {
-            final String lower = range.lowerEndpoint();
-            final String upper = range.upperEndpoint();
-
             CompletableFuture future = CompletableFuture
-                .supplyAsync(() -> splitFetcher.query(Range.closed(lower, upper)), fetchExecutor)
+                .supplyAsync(() -> splitFetcher.query(range), fetchExecutor)
                 .thenApplyAsync(querySplit -> {
                     return Lists.partition(querySplit.getRecords(), sinkConfig.getBatchSize())
                         .stream()

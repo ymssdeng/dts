@@ -2,7 +2,6 @@ package me.ymssd.dts.config;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import lombok.Data;
@@ -30,21 +29,16 @@ public class DtsConfig {
         private MongoDataSource mongo;
         private MysqlDataSource mysql;
         private String table;
-        private List<List<String>> ranges;
+        private List<String> range;
         private int step = 10000;
         private int threadCount = 1;
 
-        public List<Range<String>> getRangeList() {
-            if (ranges == null) {
+        public Range<String> getInputRange() {
+            if (range == null) {
                 return null;
             }
-            List<Range<String>> result = new ArrayList<>();
-            for (List<String> item : ranges) {
-                Preconditions.checkNotNull(item);
-                Preconditions.checkArgument(item.size() == 2);
-                result.add(Range.closed(item.get(0), item.get(1)));
-            }
-            return result;
+            Preconditions.checkArgument(range.size() == 2);
+            return Range.closed(range.get(0), range.get(1));
         }
 
         @Data

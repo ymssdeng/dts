@@ -4,6 +4,7 @@ import static java.time.Instant.ofEpochMilli;
 import static java.time.LocalDateTime.ofInstant;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Range;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
@@ -12,6 +13,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.sql.SQLException;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -101,6 +103,14 @@ public abstract class AbstractDts {
     }
 
     protected abstract void startSync();
+
+    protected List<Range<String>> getRanges() {
+        Range<String> range = fetchConfig.getInputRange();
+        if (range == null) {
+            range = splitFetcher.getMinMaxId();
+        }
+        return splitFetcher.splitRange(range);
+    }
 
     protected abstract void startDump();
 
