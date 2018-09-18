@@ -33,8 +33,12 @@ public class SplitMysqlSinker extends AbstractMysqlSinker implements SplitSinker
 
                 Object[] param = new Object[cmdList.size()];
                 for (int j = 0; j < cmdList.size(); j++) {
-                    param[j] = record.getValue(cmdList.get(j).getField());
-                    param[j] = Optional.ofNullable(param[j]).orElse(cmdList.get(j).getDefaultValue());
+                    if (cmdList.get(j).isPrimaryKey() && !cmdList.get(j).isAutoIncrement()) {
+                        param[j] = keyGenerator.generateKey().longValue();
+                    } else {
+                        param[j] = record.getValue(cmdList.get(j).getField());
+                        param[j] = Optional.ofNullable(param[j]).orElse(cmdList.get(j).getDefaultValue());
+                    }
                 }
                 params[i] = param;
             }

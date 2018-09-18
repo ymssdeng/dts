@@ -99,6 +99,7 @@ public abstract class AbstractDts {
             TableRuleConfiguration trc = new TableRuleConfiguration();
             trc.setLogicTable(sinkConfig.getTable()); //T_Order_${0..1}
             trc.setActualDataNodes("ds." + sinkConfig.getActualTables());
+
             ShardingStrategyConfiguration ssc = new StandardShardingStrategyConfiguration(
                 sinkConfig.getShardingColumn(),
                 sinkConfig.getShardingStrategy());

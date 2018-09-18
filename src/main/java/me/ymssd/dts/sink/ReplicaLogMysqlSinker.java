@@ -31,8 +31,12 @@ public class ReplicaLogMysqlSinker extends AbstractMysqlSinker implements Replic
             Record record = replicaLog.getRecord();
             Object[] params = new Object[cmdList.size()];
             for (int j = 0; j < cmdList.size(); j++) {
-                params[j] = record.getValue(cmdList.get(j).getField());
-                params[j] = Optional.ofNullable(params[j]).orElse(cmdList.get(j).getDefaultValue());
+                if (cmdList.get(j).isPrimaryKey() && !cmdList.get(j).isAutoIncrement()) {
+                    params[j] = keyGenerator.generateKey().longValue();
+                } else {
+                    params[j] = record.getValue(cmdList.get(j).getField());
+                    params[j] = Optional.ofNullable(params[j]).orElse(cmdList.get(j).getDefaultValue());
+                }
             }
             connection = dataSource.getConnection();
             QueryRunner runner = new QueryRunner(dataSource);

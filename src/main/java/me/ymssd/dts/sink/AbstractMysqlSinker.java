@@ -1,6 +1,10 @@
 package me.ymssd.dts.sink;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
+import io.shardingjdbc.core.keygen.DefaultKeyGenerator;
+import io.shardingjdbc.core.keygen.KeyGenerator;
+import io.shardingjdbc.core.util.InlineExpressionParser;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,6 +34,7 @@ public abstract class AbstractMysqlSinker {
     protected List<ColumnMetaData> cmdList;
     protected List<String> columnNames;
     protected String insertSqlFormat;
+    protected KeyGenerator keyGenerator;
 
     public AbstractMysqlSinker(DataSource noShardingDataSource, DataSource dataSource, SinkConfig sinkConfig, Metric metric) throws SQLException {
         this.noShardingDataSource = noShardingDataSource;
@@ -55,12 +60,24 @@ public abstract class AbstractMysqlSinker {
         sb.append(Joiner.on(", ").join(Arrays.asList(placeholders)));
         sb.append(")");
         insertSqlFormat = sb.toString();
+
+        keyGenerator = new DefaultKeyGenerator();
     }
 
     protected List<ColumnMetaData> getColumnMetaData() throws SQLException {
+        String table = null;
+        if (StringUtils.isNotEmpty(sinkConfig.getShardingColumn())
+            && StringUtils.isNotEmpty(sinkConfig.getShardingStrategy())
+            && StringUtils.isNotEmpty(sinkConfig.getActualTables())) {
+            List<String> actualTables = new InlineExpressionParser(sinkConfig.getActualTables()).evaluate();
+            table = actualTables.get(0);
+        } else {
+            table = sinkConfig.getTable();
+        }
+
         StringBuilder sb = new StringBuilder("SHOW COLUMNS FROM ");
         sb.append(KEYWORD_ESCAPE);
-        sb.append(sinkConfig.getTable());
+        sb.append(table);
         sb.append(KEYWORD_ESCAPE);
         QueryRunner runner = new QueryRunner(noShardingDataSource);
         return runner.query(sb.toString(), rs -> {
@@ -76,7 +93,7 @@ public abstract class AbstractMysqlSinker {
                 if (!cmd.isPrimaryKey()) {
                     cmdList.add(cmd);
                 } else if (!cmd.isAutoIncrement()) {
-                    throw new RuntimeException("support auto increment PK only");
+                    cmdList.add(cmd);
                 }
             }
             return cmdList;
