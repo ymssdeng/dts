@@ -40,7 +40,6 @@ import me.ymssd.dts.sink.ReplicaLogMysqlSinker;
 import me.ymssd.dts.sink.ReplicaLogSinker;
 import me.ymssd.dts.sink.SplitMysqlSinker;
 import me.ymssd.dts.sink.SplitSinker;
-import org.apache.commons.lang.StringUtils;
 
 /**
  * @author denghui
@@ -78,9 +77,9 @@ public abstract class AbstractDts {
         //fetch
         if (fetchConfig.getMongo() != null) {
             mongoClient = MongoClients.create(fetchConfig.getMongo().getUrl());
-            if (dtsConfig.getMode() == Mode.dump) {
+            if (dtsConfig.getMode() == Mode.Dump) {
                 splitFetcher = new SplitMongoFetcher(mongoClient, fetchConfig, metric);
-            } else if (dtsConfig.getMode() == Mode.sync) {
+            } else if (dtsConfig.getMode() == Mode.Sync) {
                 replicaLogFetcher = new OplogFetcher(mongoClient, fetchConfig, metric);
             }
         }
@@ -92,13 +91,11 @@ public abstract class AbstractDts {
         hikariConfig.setUsername(sinkConfig.getUsername());
         hikariConfig.setPassword(sinkConfig.getPassword());
         noShardingSinkDataSource = new HikariDataSource(hikariConfig);
-        if (StringUtils.isNotEmpty(sinkConfig.getShardingColumn())
-            && StringUtils.isNotEmpty(sinkConfig.getShardingStrategy())
-            && StringUtils.isNotEmpty(sinkConfig.getActualTables())) {
+        if (sinkConfig.isShardingMode()) {
             ShardingRuleConfiguration src = new ShardingRuleConfiguration();
             TableRuleConfiguration trc = new TableRuleConfiguration();
-            trc.setLogicTable(sinkConfig.getTable()); //T_Order_${0..1}
-            trc.setActualDataNodes("ds." + sinkConfig.getActualTables());
+            trc.setLogicTable(sinkConfig.getLogicTable()); //T_Order_${0..1}
+            trc.setActualDataNodes("ds." + sinkConfig.getTables());
 
             ShardingStrategyConfiguration ssc = new StandardShardingStrategyConfiguration(
                 sinkConfig.getShardingColumn(),
@@ -111,9 +108,9 @@ public abstract class AbstractDts {
         } else {
             sinkDataSource = noShardingSinkDataSource;
         }
-        if (dtsConfig.getMode() == Mode.dump) {
+        if (dtsConfig.getMode() == Mode.Dump) {
             splitSinker = new SplitMysqlSinker(noShardingSinkDataSource, sinkDataSource, sinkConfig, metric);
-        } else if (dtsConfig.getMode() == Mode.sync) {
+        } else if (dtsConfig.getMode() == Mode.Sync) {
             replicaLogSinker = new ReplicaLogMysqlSinker(noShardingSinkDataSource, sinkDataSource, sinkConfig, metric);
         }
 
@@ -131,9 +128,9 @@ public abstract class AbstractDts {
 
     public void start() {
         metric.setFetchStartTime(System.currentTimeMillis());
-        if (dtsConfig.getMode() == Mode.dump) {
+        if (dtsConfig.getMode() == Mode.Dump) {
             startDump();
-        } else if (dtsConfig.getMode() == Mode.sync) {
+        } else if (dtsConfig.getMode() == Mode.Sync) {
             startSync();
         }
     }

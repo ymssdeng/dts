@@ -1,10 +1,8 @@
 package me.ymssd.dts.sink;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Splitter;
 import io.shardingjdbc.core.keygen.DefaultKeyGenerator;
 import io.shardingjdbc.core.keygen.KeyGenerator;
-import io.shardingjdbc.core.util.InlineExpressionParser;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,7 +46,7 @@ public abstract class AbstractMysqlSinker {
         StringBuilder sb = new StringBuilder();
         sb.append("INSERT IGNORE INTO ");
         sb.append(KEYWORD_ESCAPE);
-        sb.append(sinkConfig.getTable());
+        sb.append(sinkConfig.getLogicTable());
         sb.append(KEYWORD_ESCAPE);
         sb.append(" (");
         sb.append(KEYWORD_ESCAPE);
@@ -65,19 +63,9 @@ public abstract class AbstractMysqlSinker {
     }
 
     protected List<ColumnMetaData> getColumnMetaData() throws SQLException {
-        String table = null;
-        if (StringUtils.isNotEmpty(sinkConfig.getShardingColumn())
-            && StringUtils.isNotEmpty(sinkConfig.getShardingStrategy())
-            && StringUtils.isNotEmpty(sinkConfig.getActualTables())) {
-            List<String> actualTables = new InlineExpressionParser(sinkConfig.getActualTables()).evaluate();
-            table = actualTables.get(0);
-        } else {
-            table = sinkConfig.getTable();
-        }
-
         StringBuilder sb = new StringBuilder("SHOW COLUMNS FROM ");
         sb.append(KEYWORD_ESCAPE);
-        sb.append(table);
+        sb.append(sinkConfig.getLogicTable());
         sb.append(KEYWORD_ESCAPE);
         QueryRunner runner = new QueryRunner(noShardingDataSource);
         return runner.query(sb.toString(), rs -> {

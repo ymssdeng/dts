@@ -2,11 +2,13 @@ package me.ymssd.dts.config;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
+import io.shardingjdbc.core.util.InlineExpressionParser;
 import java.util.List;
 import java.util.Map;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import me.ymssd.dts.AbstractDts.Style;
+import org.apache.commons.lang.StringUtils;
 
 /**
  * @author denghui
@@ -17,7 +19,7 @@ import me.ymssd.dts.AbstractDts.Style;
 public class DtsConfig {
 
     private Style style = Style.Java8;
-    private Mode mode;
+    private Mode mode = Mode.Dump;
     private FetchConfig fetch;
     private SinkConfig sink;
     private Map<String, String> mapping;
@@ -26,12 +28,12 @@ public class DtsConfig {
     @NoArgsConstructor
     public static class FetchConfig {
 
-        private MongoDataSource mongo;
-        private MysqlDataSource mysql;
+        private MongoFetchConfig mongo;
+        private MysqlFetchConfig mysql;
         private String table;
         private List<String> range;
         private int step = 10000;
-        private int threadCount = 1;
+        private int threadCount = Runtime.getRuntime().availableProcessors();
 
         public Range<String> getInputRange() {
             if (range == null) {
@@ -43,7 +45,7 @@ public class DtsConfig {
 
         @Data
         @NoArgsConstructor
-        public static class MongoDataSource {
+        public static class MongoFetchConfig {
             private String url;
             private String database;
             private int startTime;
@@ -52,7 +54,7 @@ public class DtsConfig {
 
         @Data
         @NoArgsConstructor
-        public static class MysqlDataSource {
+        public static class MysqlFetchConfig {
             private String url;
         }
     }
@@ -63,15 +65,22 @@ public class DtsConfig {
         private String url;
         private String username;
         private String password;
-        private String table;
-        private int threadCount = 1;
+        private String tables;
+        private int threadCount = Runtime.getRuntime().availableProcessors();
         private int batchSize = 100;
-        private String actualTables;
         private String shardingColumn;
         private String shardingStrategy;
+
+        public boolean isShardingMode() {
+            return StringUtils.isNotEmpty(shardingColumn) && StringUtils.isNotEmpty(shardingStrategy);
+        }
+
+        public String getLogicTable() {
+            return new InlineExpressionParser(tables).evaluate().get(0);
+        }
     }
 
     public enum Mode {
-        dump, sync
+        Dump, Sync
     }
 }
