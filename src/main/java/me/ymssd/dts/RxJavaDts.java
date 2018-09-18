@@ -39,6 +39,10 @@ public class RxJavaDts extends AbstractDts {
                     .observeOn(Schedulers.from(sinkExecutor));
             })
             .filter(replicaLog -> replicaLog.getRecord() != null)
+            .doOnError(e -> {
+                log.error("sync fail", e);
+                System.exit(1);
+            })
             .subscribe((replicaLog) -> replicaLogSinker.sink(replicaLog));
     }
 
@@ -77,6 +81,10 @@ public class RxJavaDts extends AbstractDts {
                 return Flowable.empty();
             })
             .sequential()
+            .doOnError(e -> {
+                log.error("dump fail", e);
+                System.exit(1);
+            })
             .doOnComplete(() -> {
                 metric.setSinkEndTime(System.currentTimeMillis());
                 printMetric();

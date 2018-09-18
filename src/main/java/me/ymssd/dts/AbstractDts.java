@@ -58,7 +58,7 @@ public abstract class AbstractDts {
     protected FieldMapper fieldMapper;
     protected SplitSinker splitSinker;
     protected DataSource sinkDataSource;
-    protected DataSource noShardingSinkDataSource;
+    protected HikariDataSource noShardingSinkDataSource;
     protected MongoClient mongoClient;
     protected Metric metric;
     protected ReplicaLogFetcher replicaLogFetcher;
@@ -103,7 +103,7 @@ public abstract class AbstractDts {
             trc.setTableShardingStrategyConfig(ssc);
             src.getTableRuleConfigs().add(trc);
             Map<String, DataSource> dsMap = new HashMap<>();
-            dsMap.put("ds", new HikariDataSource(hikariConfig));
+            dsMap.put("ds", noShardingSinkDataSource);
             sinkDataSource = ShardingDataSourceFactory.createDataSource(dsMap, src, new HashMap<>(), new Properties());
         } else {
             sinkDataSource = noShardingSinkDataSource;
@@ -122,8 +122,12 @@ public abstract class AbstractDts {
         sinkExecutor = Executors.newFixedThreadPool(sinkConfig.getThreadCount(), builder.build());
         builder.setNameFormat("shutdown-hook");
         ThreadFactory shutdownHookFactory = builder.build();
-        Runtime.getRuntime().addShutdownHook(shutdownHookFactory.newThread(() -> mongoClient.close()));
-        //Runtime.getRuntime().addShutdownHook(shutdownHookFactory.newThread(() -> sinkDataSource.close()));
+        Runtime.getRuntime().addShutdownHook(shutdownHookFactory.newThread(() -> {
+            fetchExecutor.shutdown();
+            sinkExecutor.shutdown();
+            mongoClient.close();
+            noShardingSinkDataSource.close();
+        }));
     }
 
     public void start() {
