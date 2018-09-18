@@ -10,13 +10,22 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import io.shardingjdbc.core.api.ShardingDataSourceFactory;
+import io.shardingjdbc.core.api.config.ShardingRuleConfiguration;
+import io.shardingjdbc.core.api.config.TableRuleConfiguration;
+import io.shardingjdbc.core.api.config.strategy.ShardingStrategyConfiguration;
+import io.shardingjdbc.core.api.config.strategy.StandardShardingStrategyConfiguration;
 import java.sql.SQLException;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import javax.sql.DataSource;
 import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.config.DtsConfig;
 import me.ymssd.dts.config.DtsConfig.FetchConfig;
@@ -31,6 +40,7 @@ import me.ymssd.dts.sink.ReplicaLogMysqlSinker;
 import me.ymssd.dts.sink.ReplicaLogSinker;
 import me.ymssd.dts.sink.SplitMysqlSinker;
 import me.ymssd.dts.sink.SplitSinker;
+import org.apache.commons.lang.StringUtils;
 
 /**
  * @author denghui
@@ -48,7 +58,8 @@ public abstract class AbstractDts {
     protected SplitFetcher splitFetcher;
     protected FieldMapper fieldMapper;
     protected SplitSinker splitSinker;
-    protected HikariDataSource sinkDataSource;
+    protected DataSource sinkDataSource;
+    protected DataSource noShardingSinkDataSource;
     protected MongoClient mongoClient;
     protected Metric metric;
     protected ReplicaLogFetcher replicaLogFetcher;
@@ -80,11 +91,29 @@ public abstract class AbstractDts {
         hikariConfig.setJdbcUrl(sinkConfig.getUrl());
         hikariConfig.setUsername(sinkConfig.getUsername());
         hikariConfig.setPassword(sinkConfig.getPassword());
-        sinkDataSource = new HikariDataSource(hikariConfig);
+        noShardingSinkDataSource = new HikariDataSource(hikariConfig);
+        if (StringUtils.isNotEmpty(sinkConfig.getShardingColumn())
+            && StringUtils.isNotEmpty(sinkConfig.getShardingStrategy())
+            && StringUtils.isNotEmpty(sinkConfig.getActualTables())) {
+            ShardingRuleConfiguration src = new ShardingRuleConfiguration();
+            TableRuleConfiguration trc = new TableRuleConfiguration();
+            trc.setLogicTable(sinkConfig.getTable()); //T_Order_${0..1}
+            trc.setActualDataNodes("ds." + sinkConfig.getActualTables());
+            ShardingStrategyConfiguration ssc = new StandardShardingStrategyConfiguration(
+                sinkConfig.getShardingColumn(),
+                sinkConfig.getShardingStrategy());
+            trc.setTableShardingStrategyConfig(ssc);
+            src.getTableRuleConfigs().add(trc);
+            Map<String, DataSource> dsMap = new HashMap<>();
+            dsMap.put("ds", new HikariDataSource(hikariConfig));
+            sinkDataSource = ShardingDataSourceFactory.createDataSource(dsMap, src, new HashMap<>(), new Properties());
+        } else {
+            sinkDataSource = noShardingSinkDataSource;
+        }
         if (dtsConfig.getMode() == Mode.dump) {
-            splitSinker = new SplitMysqlSinker(sinkDataSource, sinkConfig, metric);
+            splitSinker = new SplitMysqlSinker(noShardingSinkDataSource, sinkDataSource, sinkConfig, metric);
         } else if (dtsConfig.getMode() == Mode.sync) {
-            replicaLogSinker = new ReplicaLogMysqlSinker(sinkDataSource, sinkConfig, metric);
+            replicaLogSinker = new ReplicaLogMysqlSinker(noShardingSinkDataSource, sinkDataSource, sinkConfig, metric);
         }
 
         //线程池
@@ -96,7 +125,7 @@ public abstract class AbstractDts {
         builder.setNameFormat("shutdown-hook");
         ThreadFactory shutdownHookFactory = builder.build();
         Runtime.getRuntime().addShutdownHook(shutdownHookFactory.newThread(() -> mongoClient.close()));
-        Runtime.getRuntime().addShutdownHook(shutdownHookFactory.newThread(() -> sinkDataSource.close()));
+        //Runtime.getRuntime().addShutdownHook(shutdownHookFactory.newThread(() -> sinkDataSource.close()));
     }
 
     public void start() {

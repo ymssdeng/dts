@@ -66,6 +66,9 @@ public class DtsConfig {
         private String table;
         private int threadCount = 1;
         private int batchSize = 100;
+        private String actualTables;
+        private String shardingColumn;
+        private String shardingStrategy;
     }
 
     public enum Mode {

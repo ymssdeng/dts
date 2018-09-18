@@ -19,8 +19,9 @@ import org.apache.commons.dbutils.QueryRunner;
 @Slf4j
 public class SplitMysqlSinker extends AbstractMysqlSinker implements SplitSinker {
 
-    public SplitMysqlSinker(DataSource dataSource, SinkConfig sinkConfig, Metric metric) throws SQLException {
-        super(dataSource, sinkConfig, metric);
+    public SplitMysqlSinker(DataSource noShardingDataSource, DataSource dataSource,
+        SinkConfig sinkConfig, Metric metric) throws SQLException {
+        super(noShardingDataSource, dataSource, sinkConfig, metric);
     }
 
     public void sink(Split split) {

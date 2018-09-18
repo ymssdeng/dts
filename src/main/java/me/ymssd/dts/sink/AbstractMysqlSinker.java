@@ -22,6 +22,7 @@ public abstract class AbstractMysqlSinker {
 
     public static final String KEYWORD_ESCAPE = "`";
 
+    protected DataSource noShardingDataSource;
     protected DataSource dataSource;
     protected SinkConfig sinkConfig;
     protected Metric metric;
@@ -30,7 +31,8 @@ public abstract class AbstractMysqlSinker {
     protected List<String> columnNames;
     protected String insertSqlFormat;
 
-    public AbstractMysqlSinker(DataSource dataSource, SinkConfig sinkConfig, Metric metric) throws SQLException {
+    public AbstractMysqlSinker(DataSource noShardingDataSource, DataSource dataSource, SinkConfig sinkConfig, Metric metric) throws SQLException {
+        this.noShardingDataSource = noShardingDataSource;
         this.dataSource = dataSource;
         this.sinkConfig = sinkConfig;
         this.metric = metric;
@@ -60,7 +62,7 @@ public abstract class AbstractMysqlSinker {
         sb.append(KEYWORD_ESCAPE);
         sb.append(sinkConfig.getTable());
         sb.append(KEYWORD_ESCAPE);
-        QueryRunner runner = new QueryRunner(dataSource);
+        QueryRunner runner = new QueryRunner(noShardingDataSource);
         return runner.query(sb.toString(), rs -> {
             List<ColumnMetaData> cmdList = new ArrayList<>();
             while (rs.next()) {

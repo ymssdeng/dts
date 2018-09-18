@@ -19,8 +19,9 @@ import org.apache.commons.dbutils.QueryRunner;
 @Slf4j
 public class ReplicaLogMysqlSinker extends AbstractMysqlSinker implements ReplicaLogSinker {
 
-    public ReplicaLogMysqlSinker(DataSource dataSource, SinkConfig sinkConfig, Metric metric) throws SQLException {
-        super(dataSource, sinkConfig, metric);
+    public ReplicaLogMysqlSinker(DataSource noShardingDataSource, DataSource dataSource,
+        SinkConfig sinkConfig, Metric metric) throws SQLException {
+        super(noShardingDataSource, dataSource, sinkConfig, metric);
     }
 
     @Override
