@@ -22,6 +22,15 @@ import me.ymssd.dts.config.DtsConfig;
 import me.ymssd.dts.config.DtsConfig.FetchConfig;
 import me.ymssd.dts.config.DtsConfig.Mode;
 import me.ymssd.dts.config.DtsConfig.SinkConfig;
+import me.ymssd.dts.fetch.FieldMapper;
+import me.ymssd.dts.fetch.OplogFetcher;
+import me.ymssd.dts.fetch.ReplicaLogFetcher;
+import me.ymssd.dts.fetch.SplitFetcher;
+import me.ymssd.dts.fetch.SplitMongoFetcher;
+import me.ymssd.dts.sink.ReplicaLogMysqlSinker;
+import me.ymssd.dts.sink.ReplicaLogSinker;
+import me.ymssd.dts.sink.SplitMysqlSinker;
+import me.ymssd.dts.sink.SplitSinker;
 
 /**
  * @author denghui
@@ -111,7 +120,7 @@ public abstract class AbstractDts {
 
     protected abstract void startDump();
 
-    protected void print() {
+    protected void printMetric() {
         ZoneId zoneId = ZoneId.systemDefault();
         log.info("-->fetchStartTime:{}", YMDHMS.format(ofInstant(ofEpochMilli(metric.getFetchStartTime()), zoneId)));
         log.info("-->fetchEndTime:{}", YMDHMS.format(ofInstant(ofEpochMilli(metric.getFetchEndTime()), zoneId)));

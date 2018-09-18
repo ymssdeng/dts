@@ -1,4 +1,4 @@
-package me.ymssd.dts;
+package me.ymssd.dts.sink;
 
 import com.google.common.base.Joiner;
 import java.sql.SQLException;
@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import lombok.Data;
+import me.ymssd.dts.Metric;
 import me.ymssd.dts.config.DtsConfig.SinkConfig;
 import org.apache.commons.dbutils.QueryRunner;
 import org.apache.commons.lang.StringUtils;

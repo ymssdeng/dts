@@ -1,7 +1,7 @@
 package me.ymssd.dts.model;
 
 import lombok.Data;
-import me.ymssd.dts.OplogOp;
+import me.ymssd.dts.fetch.OplogOp;
 
 /**
  * @author denghui

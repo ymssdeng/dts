@@ -1,10 +1,11 @@
-package me.ymssd.dts;
+package me.ymssd.dts.sink;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Optional;
 import javax.sql.DataSource;
 import lombok.extern.slf4j.Slf4j;
+import me.ymssd.dts.Metric;
 import me.ymssd.dts.config.DtsConfig.SinkConfig;
 import me.ymssd.dts.model.Record;
 import me.ymssd.dts.model.ReplicaLog;

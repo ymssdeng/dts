@@ -1,4 +1,4 @@
-package me.ymssd.dts;
+package me.ymssd.dts.sink;
 
 import me.ymssd.dts.model.Split;
 

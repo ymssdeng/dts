@@ -1,4 +1,4 @@
-package me.ymssd.dts;
+package me.ymssd.dts.fetch;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.gte;
@@ -14,6 +14,7 @@ import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import me.ymssd.dts.Metric;
 import me.ymssd.dts.config.DtsConfig.FetchConfig;
 import me.ymssd.dts.model.Record;
 import me.ymssd.dts.model.Split;

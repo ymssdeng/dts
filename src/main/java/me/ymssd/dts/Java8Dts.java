@@ -4,7 +4,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -80,7 +79,7 @@ public class Java8Dts extends AbstractDts {
                 CompletableFuture.allOf(sinkFutures.toArray(new CompletableFuture[0]))
                     .whenComplete((v2, t2) -> {
                         metric.setSinkEndTime(System.currentTimeMillis());
-                        print();
+                        printMetric();
 
                         System.exit(0);
                     });

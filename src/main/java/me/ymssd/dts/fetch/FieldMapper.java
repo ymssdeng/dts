@@ -1,9 +1,8 @@
-package me.ymssd.dts;
+package me.ymssd.dts.fetch;
 
 import java.util.AbstractMap.SimpleEntry;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.model.Record;

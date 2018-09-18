@@ -1,4 +1,4 @@
-package me.ymssd.dts;
+package me.ymssd.dts.fetch;
 
 
 import java.util.function.Function;
