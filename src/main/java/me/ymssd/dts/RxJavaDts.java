@@ -2,11 +2,10 @@ package me.ymssd.dts;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import io.reactivex.Flowable;
 import io.reactivex.Observable;
-import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
@@ -45,47 +44,43 @@ public class RxJavaDts extends AbstractDts {
 
     @Override
     protected void startDump() {
-        Observable.fromIterable(Arrays.asList(1,2,3,4,5,6,7,8,9))
-            .flatMap(i -> {
-                return Observable.just(i).subscribeOn(Schedulers.from(sinkExecutor));
+        List<Range<String>> ranges = getRanges();
+        Flowable.fromIterable(ranges)
+            .parallel(fetchConfig.getThreadCount(), 1)
+            .runOn(Schedulers.from(fetchExecutor))
+            .flatMap(range -> {
+                Split querySplit = splitFetcher.query(range);
+                List<Record> mappedRecords = querySplit.getRecords().stream()
+                    .map(r -> fieldMapper.apply(r))
+                    .filter(r -> r != null)
+                    .collect(Collectors.toList());
+                List<Split> sinkSplits = Lists.partition(mappedRecords, sinkConfig.getBatchSize())
+                    .stream()
+                    .map(partitionRecords -> {
+                        Split sinkSplit = new Split();
+                        sinkSplit.setRecords(partitionRecords);
+                        sinkSplit.setRange(querySplit.getRange());
+                        return sinkSplit;
+                    })
+                    .collect(Collectors.toList());
+                return Flowable.fromIterable(sinkSplits);
             })
-            .doOnComplete(() -> {log.info("done");})
-            .subscribe(i -> {
-                log.info("i={}", i);
-                Observable.just(i).subscribe(j-> {
-                    log.info("j={}", j);
-                });
-            });
-
-//        List<Range<String>> ranges = getRanges();
-//        Disposable disposable = Observable.fromIterable(ranges)
-//            .subscribeOn(Schedulers.from(fetchExecutor))
-//            .map(r -> splitFetcher.query(r))
-//            .flatMap(split -> {
-//                return Observable.fromIterable(Lists.partition(split.getRecords(), sinkConfig.getBatchSize())
-//                    .stream()
-//                    .map(partitionRecords -> {
-//                        List<Record> mappedRecords = partitionRecords.stream()
-//                            .map(r -> fieldMapper.apply(r))
-//                            .filter(r -> r != null)
-//                            .collect(Collectors.toList());
-//                        if (mappedRecords.isEmpty()) {
-//                            return null;
-//                        }
-//                        Split sinkSplit = new Split();
-//                        sinkSplit.setRecords(mappedRecords);
-//                        sinkSplit.setRange(split.getRange());
-//                        return sinkSplit;
-//                    })
-//                    .filter(r -> r != null)
-//                    .collect(Collectors.toList()))
-//                    .subscribeOn(Schedulers.from(sinkExecutor));
-//            })
-//            .subscribe(split -> {
-//                splitSinker.sink(split);
-//                if (metric.getSinkStartTime() == 0) {
-//                    metric.setSinkStartTime(System.currentTimeMillis());
-//                }
-//            });
+            .sequential()
+            .doOnComplete(() -> metric.setFetchEndTime(System.currentTimeMillis()))
+            .parallel(sinkConfig.getThreadCount(), 1)
+            .runOn(Schedulers.from(sinkExecutor))
+            .flatMap(split -> {
+                splitSinker.sink(split);
+                if (metric.getSinkStartTime() == 0) {
+                    metric.setSinkStartTime(System.currentTimeMillis());
+                }
+                return Flowable.empty();
+            })
+            .sequential()
+            .doOnComplete(() -> {
+                metric.setSinkEndTime(System.currentTimeMillis());
+                print();
+            })
+            .subscribe();
     }
 }
