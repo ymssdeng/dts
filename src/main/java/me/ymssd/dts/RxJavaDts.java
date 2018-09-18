@@ -80,6 +80,7 @@ public class RxJavaDts extends AbstractDts {
             .doOnComplete(() -> {
                 metric.setSinkEndTime(System.currentTimeMillis());
                 printMetric();
+                System.exit(0);
             })
             .subscribe();
     }

@@ -6,7 +6,9 @@ DONE:
 - 全量迁移时可指定输入ranges
 - 支持mongo增量迁移(Insert)
 - 增量迁移支持设置起始和停止时间
-
-TODO:
 - 增加RxJava2.0处理方式
 - 支持目标数据库分表
+
+TODO:
+- 配置优化
+- 源数据库Mysql支持
