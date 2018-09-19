@@ -32,6 +32,9 @@ public class FieldMapper implements Function<Record, Record> {
 
     @Override
     public Record apply(Record record) {
+        if (mapping.isEmpty()) {
+            return record;
+        }
         Record mappedRecord = new Record();
         for (SimpleEntry<String, Object> field : record) {
             String mappedKey = mapping.get(field.getKey());

@@ -40,34 +40,40 @@ public class Java8Dts extends AbstractDts {
 
     @Override
     protected void startDump() {
-        List<Range<String>> ranges = getRanges();
+        List<Range> ranges = getRanges();
 
         List<CompletableFuture> queryFutures = new ArrayList<>();
         List<CompletableFuture> sinkFutures = new ArrayList<>();
-        for (Range<String> range : ranges) {
+        for (Range range : ranges) {
             CompletableFuture future = CompletableFuture
                 .supplyAsync(() -> {
                     Split querySplit = splitFetcher.query(range);
                     List<Record> mappedRecords = querySplit.getRecords().stream()
-                        .map(r -> fieldMapper.apply(r))
+                        .map(rr -> fieldMapper.apply(rr))
                         .filter(r -> r != null)
                         .collect(Collectors.toList());
-                    return Lists.partition(mappedRecords, sinkConfig.getBatchSize())
+                    List<Split> sinkSplits = Lists.partition(mappedRecords, sinkConfig.getBatchSize())
                         .stream()
                         .map(partitionRecords -> {
                             Split sinkSplit = new Split();
                             sinkSplit.setRecords(partitionRecords);
-                            sinkSplit.setRange(querySplit.getRange());
                             return sinkSplit;
                         })
                         .collect(Collectors.toList());
+                    metric.getFetchSize().addAndGet(querySplit.getRecords().size());
+                    log.info("fetch range:{}", range);
+                    return sinkSplits;
                 }, fetchExecutor)
                 .thenAcceptAsync(sinkSplits -> {
                     for (Split sinkSplit : sinkSplits) {
-                        sinkFutures.add(CompletableFuture.runAsync(() -> splitSinker.sink(sinkSplit), sinkExecutor));
-                        if (metric.getSinkStartTime() == 0) {
-                            metric.setSinkStartTime(System.currentTimeMillis());
-                        }
+                        sinkFutures.add(CompletableFuture.runAsync(() -> {
+                            if (metric.getSinkStartTime() == 0) {
+                                metric.setSinkStartTime(System.currentTimeMillis());
+                            }
+                            splitSinker.sink(sinkSplit);
+                            metric.getSinkSize().addAndGet(sinkSplit.getRecords().size());
+                            log.info("sink size:{}", sinkSplit.getRecords().size());
+                        }, sinkExecutor));
                     }
                 }, sinkExecutor);
             queryFutures.add(future);

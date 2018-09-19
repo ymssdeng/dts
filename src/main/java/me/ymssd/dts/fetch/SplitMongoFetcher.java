@@ -26,30 +26,26 @@ import org.bson.types.ObjectId;
  * @create 2018/9/6
  */
 @Slf4j
-public class SplitMongoFetcher implements SplitFetcher {
+public class SplitMongoFetcher implements SplitFetcher<String> {
 
     private FetchConfig fetchConfig;
-    private Metric metric;
     private MongoClient mongoClient;
-    private MongoDatabase mongoDatabase;
 
-    public SplitMongoFetcher(MongoClient mongoClient, FetchConfig fetchConfig, Metric metric) {
+    public SplitMongoFetcher(MongoClient mongoClient, FetchConfig fetchConfig) {
         this.mongoClient = mongoClient;
         this.fetchConfig = fetchConfig;
-        this.metric = metric;
-
-        mongoDatabase = mongoClient.getDatabase(fetchConfig.getMongo().getDatabase());
     }
 
     @Override
     public Range<String> getMinMaxId() {
         final String field = "_id";
-        Document min = mongoDatabase.getCollection(fetchConfig.getTable())
+        MongoDatabase db = mongoClient.getDatabase(fetchConfig.getMongo().getDatabase());
+        Document min = db.getCollection(fetchConfig.getTable())
             .find()
             .projection(Projections.include(field))
             .sort(Sorts.ascending(field))
             .first();
-        Document max = mongoDatabase.getCollection(fetchConfig.getTable())
+        Document max = db.getCollection(fetchConfig.getTable())
             .find()
             .projection(Projections.include(field))
             .sort(Sorts.descending(field))
@@ -79,7 +75,8 @@ public class SplitMongoFetcher implements SplitFetcher {
     @Override
     public Split query(Range<String> range) {
         List<Record> records = new ArrayList<>();
-        MongoCursor<Document> cursor = mongoDatabase.getCollection(fetchConfig.getTable())
+        MongoDatabase db = mongoClient.getDatabase(fetchConfig.getMongo().getDatabase());
+        MongoCursor<Document> cursor = db.getCollection(fetchConfig.getTable())
             .find(and(gte("_id", new ObjectId(range.lowerEndpoint())),
                 lte("_id", new ObjectId(range.upperEndpoint()))))
             .iterator();
@@ -92,10 +89,7 @@ public class SplitMongoFetcher implements SplitFetcher {
             records.add(record);
         }
         Split split = new Split();
-        split.setRange(range);
         split.setRecords(records);
-        metric.getFetchSize().addAndGet(split.getRecords().size());
-        log.info("fetch split:{}", range);
         return split;
     }
 

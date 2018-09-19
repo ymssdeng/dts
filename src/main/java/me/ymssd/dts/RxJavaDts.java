@@ -48,7 +48,7 @@ public class RxJavaDts extends AbstractDts {
 
     @Override
     protected void startDump() {
-        List<Range<String>> ranges = getRanges();
+        List<Range> ranges = getRanges();
         Flowable.fromIterable(ranges)
             .parallel(fetchConfig.getThreadCount(), 1)
             .runOn(Schedulers.from(fetchExecutor))
@@ -63,10 +63,11 @@ public class RxJavaDts extends AbstractDts {
                     .map(partitionRecords -> {
                         Split sinkSplit = new Split();
                         sinkSplit.setRecords(partitionRecords);
-                        sinkSplit.setRange(querySplit.getRange());
                         return sinkSplit;
                     })
                     .collect(Collectors.toList());
+                metric.getFetchSize().addAndGet(querySplit.getRecords().size());
+                log.info("query range:{}", range);
                 return Flowable.fromIterable(sinkSplits);
             })
             .sequential()
@@ -74,10 +75,12 @@ public class RxJavaDts extends AbstractDts {
             .parallel(sinkConfig.getThreadCount(), 1)
             .runOn(Schedulers.from(sinkExecutor))
             .flatMap(split -> {
-                splitSinker.sink(split);
                 if (metric.getSinkStartTime() == 0) {
                     metric.setSinkStartTime(System.currentTimeMillis());
                 }
+                splitSinker.sink(split);
+                metric.getSinkSize().addAndGet(split.getRecords().size());
+                log.info("sink size:{}", split.getRecords().size());
                 return Flowable.empty();
             })
             .sequential()

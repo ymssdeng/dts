@@ -8,12 +8,12 @@ import me.ymssd.dts.model.Split;
  * @author denghui
  * @create 2018/9/10
  */
-public interface SplitFetcher {
+public interface SplitFetcher<T extends Comparable<?>> {
 
-    Range<String> getMinMaxId();
+    Range<T> getMinMaxId();
 
-    List<Range<String>> splitRange(Range<String> range);
+    List<Range<T>> splitRange(Range<T> range);
 
-    Split query(Range<String> range);
+    Split query(Range<T> range);
 
 }

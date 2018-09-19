@@ -20,8 +20,8 @@ import org.apache.commons.dbutils.QueryRunner;
 public class ReplicaLogMysqlSinker extends AbstractMysqlSinker implements ReplicaLogSinker {
 
     public ReplicaLogMysqlSinker(DataSource noShardingDataSource, DataSource dataSource,
-        SinkConfig sinkConfig, Metric metric) throws SQLException {
-        super(noShardingDataSource, dataSource, sinkConfig, metric);
+        SinkConfig sinkConfig) throws SQLException {
+        super(noShardingDataSource, dataSource, sinkConfig);
     }
 
     @Override
@@ -31,7 +31,7 @@ public class ReplicaLogMysqlSinker extends AbstractMysqlSinker implements Replic
             Record record = replicaLog.getRecord();
             Object[] params = new Object[cmdList.size()];
             for (int j = 0; j < cmdList.size(); j++) {
-                if (cmdList.get(j).isPrimaryKey() && !cmdList.get(j).isAutoIncrement()) {
+                if (cmdList.get(j).isPrimaryKey()) {
                     params[j] = keyGenerator.generateKey().longValue();
                 } else {
                     params[j] = record.getValue(cmdList.get(j).getField());
@@ -41,7 +41,6 @@ public class ReplicaLogMysqlSinker extends AbstractMysqlSinker implements Replic
             connection = dataSource.getConnection();
             QueryRunner runner = new QueryRunner(dataSource);
             runner.execute(insertSqlFormat, params);
-            metric.getFetchSize().incrementAndGet();
             log.info("sink replica log:{}", record);
         } catch (SQLException e) {
             log.error("fail to sink replica log", e);

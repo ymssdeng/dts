@@ -20,8 +20,8 @@ import org.apache.commons.dbutils.QueryRunner;
 public class SplitMysqlSinker extends AbstractMysqlSinker implements SplitSinker {
 
     public SplitMysqlSinker(DataSource noShardingDataSource, DataSource dataSource,
-        SinkConfig sinkConfig, Metric metric) throws SQLException {
-        super(noShardingDataSource, dataSource, sinkConfig, metric);
+        SinkConfig sinkConfig) throws SQLException {
+        super(noShardingDataSource, dataSource, sinkConfig);
     }
 
     public void sink(Split split) {
@@ -33,7 +33,7 @@ public class SplitMysqlSinker extends AbstractMysqlSinker implements SplitSinker
 
                 Object[] param = new Object[cmdList.size()];
                 for (int j = 0; j < cmdList.size(); j++) {
-                    if (cmdList.get(j).isPrimaryKey() && !cmdList.get(j).isAutoIncrement()) {
+                    if (cmdList.get(j).isPrimaryKey()) {
                         param[j] = keyGenerator.generateKey().longValue();
                     } else {
                         param[j] = record.getValue(cmdList.get(j).getField());
@@ -47,11 +47,7 @@ public class SplitMysqlSinker extends AbstractMysqlSinker implements SplitSinker
             QueryRunner runner = new QueryRunner(dataSource);
             runner.batch(connection, insertSqlFormat, params);
             connection.commit();
-
-            metric.getSinkSize().addAndGet(split.getRecords().size());
-            log.info("sink size:{}", split.getRecords().size());
         } catch (SQLException e) {
-            metric.getFailedRange().add(split.getRange());
             log.error("fail sink split", e);
         } finally {
             DbUtils.closeQuietly(connection);

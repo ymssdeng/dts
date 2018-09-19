@@ -36,6 +36,7 @@ import me.ymssd.dts.fetch.OplogFetcher;
 import me.ymssd.dts.fetch.ReplicaLogFetcher;
 import me.ymssd.dts.fetch.SplitFetcher;
 import me.ymssd.dts.fetch.SplitMongoFetcher;
+import me.ymssd.dts.fetch.SplitMysqlFetcher;
 import me.ymssd.dts.sink.ReplicaLogMysqlSinker;
 import me.ymssd.dts.sink.ReplicaLogSinker;
 import me.ymssd.dts.sink.SplitMysqlSinker;
@@ -60,6 +61,7 @@ public abstract class AbstractDts {
     protected DataSource sinkDataSource;
     protected HikariDataSource noShardingSinkDataSource;
     protected MongoClient mongoClient;
+    protected HikariDataSource fetchDataSource;
     protected Metric metric;
     protected ReplicaLogFetcher replicaLogFetcher;
     protected ReplicaLogSinker replicaLogSinker;
@@ -75,13 +77,22 @@ public abstract class AbstractDts {
         metric = new Metric();
 
         //fetch
-        if (fetchConfig.getMongo() != null) {
+        if (fetchConfig.getMongo() != null && fetchConfig.getMysql() != null) {
+            throw new RuntimeException("can not specify mongo and mysql source at the same time");
+        } else if (fetchConfig.getMongo() != null) {
             mongoClient = MongoClients.create(fetchConfig.getMongo().getUrl());
             if (dtsConfig.getMode() == Mode.Dump) {
-                splitFetcher = new SplitMongoFetcher(mongoClient, fetchConfig, metric);
+                splitFetcher = new SplitMongoFetcher(mongoClient, fetchConfig);
             } else if (dtsConfig.getMode() == Mode.Sync) {
                 replicaLogFetcher = new OplogFetcher(mongoClient, fetchConfig, metric);
             }
+        } else if (fetchConfig.getMysql() != null) {
+            HikariConfig hikariConfig = new HikariConfig();
+            hikariConfig.setJdbcUrl(fetchConfig.getMysql().getUrl());
+            hikariConfig.setUsername(fetchConfig.getMysql().getUsername());
+            hikariConfig.setPassword(fetchConfig.getMysql().getPassword());
+            fetchDataSource = new HikariDataSource(hikariConfig);
+            splitFetcher = new SplitMysqlFetcher(fetchDataSource, fetchConfig);
         }
         fieldMapper = new FieldMapper(dtsConfig.getMapping());
 
@@ -109,9 +120,9 @@ public abstract class AbstractDts {
             sinkDataSource = noShardingSinkDataSource;
         }
         if (dtsConfig.getMode() == Mode.Dump) {
-            splitSinker = new SplitMysqlSinker(noShardingSinkDataSource, sinkDataSource, sinkConfig, metric);
+            splitSinker = new SplitMysqlSinker(noShardingSinkDataSource, sinkDataSource, sinkConfig);
         } else if (dtsConfig.getMode() == Mode.Sync) {
-            replicaLogSinker = new ReplicaLogMysqlSinker(noShardingSinkDataSource, sinkDataSource, sinkConfig, metric);
+            replicaLogSinker = new ReplicaLogMysqlSinker(noShardingSinkDataSource, sinkDataSource, sinkConfig);
         }
 
         //线程池
@@ -125,7 +136,12 @@ public abstract class AbstractDts {
         Runtime.getRuntime().addShutdownHook(shutdownHookFactory.newThread(() -> {
             fetchExecutor.shutdown();
             sinkExecutor.shutdown();
-            mongoClient.close();
+            if (mongoClient != null) {
+                mongoClient.close();
+            }
+            if (fetchDataSource != null) {
+                fetchDataSource.close();
+            }
             noShardingSinkDataSource.close();
         }));
     }
@@ -141,8 +157,8 @@ public abstract class AbstractDts {
 
     protected abstract void startSync();
 
-    protected List<Range<String>> getRanges() {
-        Range<String> range = fetchConfig.getInputRange();
+    protected List<Range> getRanges() {
+        Range range = fetchConfig.getInputRange();
         if (range == null) {
             range = splitFetcher.getMinMaxId();
         }

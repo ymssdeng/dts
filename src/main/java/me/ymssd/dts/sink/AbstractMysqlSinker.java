@@ -4,17 +4,15 @@ import com.google.common.base.Joiner;
 import io.shardingjdbc.core.keygen.DefaultKeyGenerator;
 import io.shardingjdbc.core.keygen.KeyGenerator;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
-import lombok.Data;
 import me.ymssd.dts.Metric;
 import me.ymssd.dts.config.DtsConfig.SinkConfig;
-import org.apache.commons.dbutils.QueryRunner;
-import org.apache.commons.lang.StringUtils;
+import me.ymssd.dts.model.ColumnMetaData;
+import me.ymssd.dts.util.MysqlUtils;
 
 /**
  * @author denghui
@@ -27,20 +25,25 @@ public abstract class AbstractMysqlSinker {
     protected DataSource noShardingDataSource;
     protected DataSource dataSource;
     protected SinkConfig sinkConfig;
-    protected Metric metric;
 
     protected List<ColumnMetaData> cmdList;
     protected List<String> columnNames;
     protected String insertSqlFormat;
     protected KeyGenerator keyGenerator;
 
-    public AbstractMysqlSinker(DataSource noShardingDataSource, DataSource dataSource, SinkConfig sinkConfig, Metric metric) throws SQLException {
+    public AbstractMysqlSinker(DataSource noShardingDataSource, DataSource dataSource, SinkConfig sinkConfig) throws SQLException {
         this.noShardingDataSource = noShardingDataSource;
         this.dataSource = dataSource;
         this.sinkConfig = sinkConfig;
-        this.metric = metric;
 
-        cmdList = getColumnMetaData();
+        cmdList = MysqlUtils.getColumnsMetaData(noShardingDataSource, sinkConfig.getLogicTable());
+        Iterator<ColumnMetaData> iterator = cmdList.iterator();
+        while (iterator.hasNext()) {
+            ColumnMetaData columnMetaData = iterator.next();
+            if (columnMetaData.isPrimaryKey() && columnMetaData.isAutoIncrement()) {
+                iterator.remove();
+            }
+        }
         columnNames = cmdList.stream().map(cmd -> cmd.getField()).collect(Collectors.toList());
 
         StringBuilder sb = new StringBuilder();
@@ -62,54 +65,4 @@ public abstract class AbstractMysqlSinker {
         keyGenerator = new DefaultKeyGenerator();
     }
 
-    protected List<ColumnMetaData> getColumnMetaData() throws SQLException {
-        StringBuilder sb = new StringBuilder("SHOW COLUMNS FROM ");
-        sb.append(KEYWORD_ESCAPE);
-        sb.append(sinkConfig.getLogicTable());
-        sb.append(KEYWORD_ESCAPE);
-        QueryRunner runner = new QueryRunner(noShardingDataSource);
-        return runner.query(sb.toString(), rs -> {
-            List<ColumnMetaData> cmdList = new ArrayList<>();
-            while (rs.next()) {
-                ColumnMetaData cmd = new ColumnMetaData();
-                cmd.setField(rs.getString("Field"));
-                cmd.setType(rs.getString("Type"));
-                cmd.setNull(rs.getString("Null"));
-                cmd.setKey(rs.getString("Key"));
-                cmd.setDefault(rs.getString("Default"));
-                cmd.setExtra(rs.getString("Extra"));
-                if (!cmd.isPrimaryKey()) {
-                    cmdList.add(cmd);
-                } else if (!cmd.isAutoIncrement()) {
-                    cmdList.add(cmd);
-                }
-            }
-            return cmdList;
-        });
-    }
-
-    @Data
-    static class ColumnMetaData {
-        private String Field;
-        private String Type;
-        private String Null;
-        private String Key;
-        private String Default;
-        private String Extra;
-
-        public Object getDefaultValue() {
-            if ("CURRENT_TIMESTAMP".equals(Default)) {
-                return new Date();
-            }
-            return Default;
-        }
-
-        public boolean isPrimaryKey() {
-            return "PRI".equals(Key);
-        }
-
-        public boolean isAutoIncrement() {
-            return StringUtils.isNotEmpty(Extra) && Extra.contains("auto_increment");
-        }
-    }
 }

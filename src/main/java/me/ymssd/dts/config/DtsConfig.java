@@ -56,6 +56,8 @@ public class DtsConfig {
         @NoArgsConstructor
         public static class MysqlFetchConfig {
             private String url;
+            private String username;
+            private String password;
         }
     }
 
