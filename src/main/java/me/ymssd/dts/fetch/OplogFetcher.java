@@ -52,7 +52,7 @@ public class OplogFetcher implements ReplicaLogFetcher {
             .limit(1)
             .iterator();
         if (!cursor.hasNext()) {
-            throw new RuntimeException("no oplog find");
+            throw new RuntimeException("no oplog findByMongoCode");
         }
         Document oplog = cursor.next();
         BsonTimestamp ts = (BsonTimestamp) oplog.get("ts");
@@ -87,12 +87,12 @@ public class OplogFetcher implements ReplicaLogFetcher {
             if (oplog != null) {
                 log.debug("{}", oplog);
                 metric.getFetchSize().incrementAndGet();
-                OplogOp op = OplogOp.find(oplog.getString("op"));
+                ReplicaLogOp op = ReplicaLogOp.findByMongoCode(oplog.getString("op"));
                 Record record = new Record();
                 Document data = null, o = (Document) oplog.get("o"), o2 = (Document) oplog.get("o2");
-                if (op == OplogOp.INSERT) {
+                if (op == ReplicaLogOp.INSERT) {
                     data = o;
-                } else if (op == OplogOp.UPDATE) {
+                } else if (op == ReplicaLogOp.UPDATE) {
                     //data = (Document) o.get("$set");
                     //record.add(new SimpleEntry<>("_id", o2.getObjectId("_id")));
                 }

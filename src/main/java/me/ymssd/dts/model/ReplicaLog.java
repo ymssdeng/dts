@@ -1,7 +1,7 @@
 package me.ymssd.dts.model;
 
 import lombok.Data;
-import me.ymssd.dts.fetch.OplogOp;
+import me.ymssd.dts.fetch.ReplicaLogOp;
 
 /**
  * @author denghui
@@ -10,6 +10,6 @@ import me.ymssd.dts.fetch.OplogOp;
 @Data
 public class ReplicaLog {
 
-    private OplogOp op;
+    private ReplicaLogOp op;
     private Record record;
 }

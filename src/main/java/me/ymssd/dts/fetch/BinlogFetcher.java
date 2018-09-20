@@ -69,7 +69,7 @@ public class BinlogFetcher implements ReplicaLogFetcher {
                             record.add(new SimpleEntry<>(columnNames.get(i), row[i]));
                         }
                         replicaLog.setRecord(record);
-                        replicaLog.setOp(OplogOp.INSERT);
+                        replicaLog.setOp(ReplicaLogOp.INSERT);
                         consumer.accept(replicaLog);
                     }
                 }
