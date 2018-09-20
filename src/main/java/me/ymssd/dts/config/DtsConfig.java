@@ -58,6 +58,7 @@ public class DtsConfig {
             private String url;
             private String username;
             private String password;
+            private long position;
         }
     }
 

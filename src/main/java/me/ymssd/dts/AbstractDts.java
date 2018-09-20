@@ -31,6 +31,7 @@ import me.ymssd.dts.config.DtsConfig;
 import me.ymssd.dts.config.DtsConfig.FetchConfig;
 import me.ymssd.dts.config.DtsConfig.Mode;
 import me.ymssd.dts.config.DtsConfig.SinkConfig;
+import me.ymssd.dts.fetch.BinlogFetcher;
 import me.ymssd.dts.fetch.FieldMapper;
 import me.ymssd.dts.fetch.OplogFetcher;
 import me.ymssd.dts.fetch.ReplicaLogFetcher;
@@ -92,7 +93,11 @@ public abstract class AbstractDts {
             hikariConfig.setUsername(fetchConfig.getMysql().getUsername());
             hikariConfig.setPassword(fetchConfig.getMysql().getPassword());
             fetchDataSource = new HikariDataSource(hikariConfig);
-            splitFetcher = new SplitMysqlFetcher(fetchDataSource, fetchConfig);
+            if (dtsConfig.getMode() == Mode.Dump) {
+                splitFetcher = new SplitMysqlFetcher(fetchDataSource, fetchConfig);
+            } else if (dtsConfig.getMode() == Mode.Sync) {
+                replicaLogFetcher = new BinlogFetcher(fetchDataSource, fetchConfig);
+            }
         }
         fieldMapper = new FieldMapper(dtsConfig.getMapping());
 

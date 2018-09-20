@@ -5,6 +5,7 @@ import static me.ymssd.dts.sink.AbstractMysqlSinker.KEYWORD_ESCAPE;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import me.ymssd.dts.model.ColumnMetaData;
 import org.apache.commons.dbutils.QueryRunner;
@@ -23,6 +24,11 @@ public class MysqlUtils {
             }
         }
         return null;
+    }
+
+    public static List<String> getColumnNames(DataSource dataSource, String table) throws SQLException {
+        List<ColumnMetaData> columnMetaDataList = getColumnsMetaData(dataSource, table);
+        return columnMetaDataList.stream().map(m -> m.getField()).collect(Collectors.toList());
     }
 
     public static List<ColumnMetaData> getColumnsMetaData(DataSource dataSource, String table) throws SQLException {
