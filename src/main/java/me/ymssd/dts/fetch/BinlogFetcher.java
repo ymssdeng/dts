@@ -1,5 +1,7 @@
 package me.ymssd.dts.fetch;
 
+import static me.ymssd.dts.AbstractDts.MAX_BUFFER_SIZE;
+
 import com.github.shyiko.mysql.binlog.BinaryLogClient;
 import com.github.shyiko.mysql.binlog.event.EventType;
 import com.github.shyiko.mysql.binlog.event.TableMapEventData;
@@ -10,9 +12,11 @@ import java.io.Serializable;
 import java.sql.SQLException;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import javax.sql.DataSource;
 import lombok.extern.slf4j.Slf4j;
+import me.ymssd.dts.Metric;
 import me.ymssd.dts.config.DtsConfig.FetchConfig;
 import me.ymssd.dts.model.Record;
 import me.ymssd.dts.model.ReplicaLog;
@@ -27,12 +31,14 @@ public class BinlogFetcher implements ReplicaLogFetcher {
 
     private DataSource dataSource;
     private FetchConfig fetchConfig;
+    private Metric metric;
     private long tableId = -1;
     private List<String> columnNames;
 
-    public BinlogFetcher(DataSource dataSource, FetchConfig fetchConfig) throws SQLException {
+    public BinlogFetcher(DataSource dataSource, FetchConfig fetchConfig, Metric metric) throws SQLException {
         this.dataSource = dataSource;
         this.fetchConfig = fetchConfig;
+        this.metric = metric;
         this.columnNames = MysqlUtils.getColumnNames(dataSource, fetchConfig.getTable());
     }
 
@@ -50,6 +56,15 @@ public class BinlogFetcher implements ReplicaLogFetcher {
         }
         client.setServerId(System.currentTimeMillis());
         client.registerEventListener(event -> {
+            long fetchSize = metric.getFetchSize().get();
+            long sinkSize = metric.getSinkSize().get();
+            while (fetchSize - sinkSize > MAX_BUFFER_SIZE) {
+                log.info("fetchSize:{}, sinkSize:{}, sleep...", fetchSize, sinkSize);
+                try {
+                    TimeUnit.SECONDS.sleep(3);
+                } catch (InterruptedException e) { }
+            }
+
             EventType eventType = event.getHeader().getEventType();
             if (eventType == EventType.TABLE_MAP) {
                 TableMapEventData data = event.getData();
@@ -71,6 +86,7 @@ public class BinlogFetcher implements ReplicaLogFetcher {
                         replicaLog.setRecord(record);
                         replicaLog.setOp(ReplicaLogOp.INSERT);
                         consumer.accept(replicaLog);
+                        metric.getFetchSize().incrementAndGet();
                     }
                 }
             }

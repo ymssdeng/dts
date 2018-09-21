@@ -55,7 +55,7 @@ public class SplitMongoFetcher implements SplitFetcher<String> {
 
     @Override
     public List<Range<String>> splitRange(Range<String> range) {
-        int step = fetchConfig.getStep();
+        long step = fetchConfig.getStep();
         int lowerTime = Integer.valueOf(range.lowerEndpoint().substring(0, 8), 16);
         int upperTime = Integer.valueOf(range.upperEndpoint().substring(0, 8), 16);
         String suffix = range.lowerEndpoint().substring(8);

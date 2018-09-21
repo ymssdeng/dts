@@ -63,7 +63,7 @@ public class SplitMysqlFetcher implements SplitFetcher<Long> {
 
     @Override
     public List<Range<Long>> splitRange(Range<Long> range) {
-        int step = fetchConfig.getStep();
+        long step = fetchConfig.getStep();
         List<Range<Long>> ranges = new ArrayList<>();
         long lower = range.lowerEndpoint(), upper;
         while (lower + step < range.upperEndpoint()) {

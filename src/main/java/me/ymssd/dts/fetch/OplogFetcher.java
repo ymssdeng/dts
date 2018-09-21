@@ -3,6 +3,7 @@ package me.ymssd.dts.fetch;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.gt;
+import static me.ymssd.dts.AbstractDts.MAX_BUFFER_SIZE;
 
 import com.mongodb.CursorType;
 import com.mongodb.client.MongoClient;
@@ -12,6 +13,7 @@ import com.mongodb.client.model.Sorts;
 import java.time.Instant;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.Map.Entry;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.Metric;
@@ -85,6 +87,15 @@ public class OplogFetcher implements ReplicaLogFetcher {
             }
             Document oplog = cursor.tryNext();
             if (oplog != null) {
+                long fetchSize = metric.getFetchSize().get();
+                long sinkSize = metric.getSinkSize().get();
+                while (fetchSize - sinkSize > MAX_BUFFER_SIZE) {
+                    log.info("fetchSize:{}, sinkSize:{}, sleep...", fetchSize, sinkSize);
+                    try {
+                        TimeUnit.SECONDS.sleep(3);
+                    } catch (InterruptedException e) { }
+                }
+
                 log.debug("{}", oplog);
                 metric.getFetchSize().incrementAndGet();
                 ReplicaLogOp op = ReplicaLogOp.findByMongoCode(oplog.getString("op"));
@@ -105,6 +116,7 @@ public class OplogFetcher implements ReplicaLogFetcher {
                     replicaLog.setOp(op);
                     replicaLog.setRecord(record);
                     consumer.accept(replicaLog);
+                    metric.getFetchSize().incrementAndGet();
                 }
             }
         }

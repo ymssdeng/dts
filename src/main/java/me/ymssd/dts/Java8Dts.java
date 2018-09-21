@@ -6,6 +6,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.config.DtsConfig;
@@ -47,6 +48,15 @@ public class Java8Dts extends AbstractDts {
         for (Range range : ranges) {
             CompletableFuture future = CompletableFuture
                 .supplyAsync(() -> {
+                    long fetchSize = metric.getFetchSize().get();
+                    long sinkSize = metric.getSinkSize().get();
+                    while (fetchSize - sinkSize > MAX_BUFFER_SIZE) {
+                        log.info("fetchSize:{}, sinkSize:{}, sleep...", fetchSize, sinkSize);
+                        try {
+                            TimeUnit.SECONDS.sleep(3);
+                        } catch (InterruptedException e) { }
+                    }
+
                     Split querySplit = splitFetcher.query(range);
                     List<Record> mappedRecords = querySplit.getRecords().stream()
                         .map(rr -> fieldMapper.apply(rr))

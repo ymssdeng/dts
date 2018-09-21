@@ -7,6 +7,7 @@ import io.reactivex.Observable;
 import io.reactivex.schedulers.Schedulers;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import me.ymssd.dts.config.DtsConfig;
@@ -43,7 +44,9 @@ public class RxJavaDts extends AbstractDts {
                 log.error("sync fail", e);
                 System.exit(1);
             })
-            .subscribe((replicaLog) -> replicaLogSinker.sink(replicaLog));
+            .subscribe((replicaLog) -> {
+                replicaLogSinker.sink(replicaLog);
+            });
     }
 
     @Override
@@ -53,6 +56,15 @@ public class RxJavaDts extends AbstractDts {
             .parallel(fetchConfig.getThreadCount(), 1)
             .runOn(Schedulers.from(fetchExecutor))
             .flatMap(range -> {
+                long fetchSize = metric.getFetchSize().get();
+                long sinkSize = metric.getSinkSize().get();
+                while (fetchSize - sinkSize > MAX_BUFFER_SIZE) {
+                    log.info("fetchSize:{}, sinkSize:{}, sleep...", fetchSize, sinkSize);
+                    try {
+                        TimeUnit.SECONDS.sleep(3);
+                    } catch (InterruptedException e) { }
+                }
+
                 Split querySplit = splitFetcher.query(range);
                 List<Record> mappedRecords = querySplit.getRecords().stream()
                     .map(r -> fieldMapper.apply(r))
@@ -70,7 +82,7 @@ public class RxJavaDts extends AbstractDts {
                 log.info("query range:{}", range);
                 return Flowable.fromIterable(sinkSplits);
             })
-            .sequential()
+            .sequential().onBackpressureDrop()
             .doOnComplete(() -> metric.setFetchEndTime(System.currentTimeMillis()))
             .parallel(sinkConfig.getThreadCount(), 1)
             .runOn(Schedulers.from(sinkExecutor))

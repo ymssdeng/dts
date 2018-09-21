@@ -32,7 +32,7 @@ public class DtsConfig {
         private MysqlFetchConfig mysql;
         private String table;
         private List<String> range;
-        private int step = 10000;
+        private long step = 10000;
         private int threadCount = Runtime.getRuntime().availableProcessors();
 
         public Range<String> getInputRange() {

@@ -50,6 +50,7 @@ import me.ymssd.dts.sink.SplitSinker;
 @Slf4j
 public abstract class AbstractDts {
     private static final DateTimeFormatter YMDHMS= DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    public static final int MAX_BUFFER_SIZE = 100000;
 
     protected DtsConfig dtsConfig;
     protected FetchConfig fetchConfig;
@@ -96,7 +97,7 @@ public abstract class AbstractDts {
             if (dtsConfig.getMode() == Mode.Dump) {
                 splitFetcher = new SplitMysqlFetcher(fetchDataSource, fetchConfig);
             } else if (dtsConfig.getMode() == Mode.Sync) {
-                replicaLogFetcher = new BinlogFetcher(fetchDataSource, fetchConfig);
+                replicaLogFetcher = new BinlogFetcher(fetchDataSource, fetchConfig, metric);
             }
         }
         fieldMapper = new FieldMapper(dtsConfig.getMapping());
